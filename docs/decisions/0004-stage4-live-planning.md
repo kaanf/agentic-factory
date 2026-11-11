@@ -29,6 +29,7 @@ in-memory snapshots. Stage 4 adds that composition and changes no planning rule.
 | L8 | `--save-evidence FILE` writes the validated snapshot a live plan used; it requires `--live` and is refused inside the project | Audit and reproducibility: a saved live snapshot replans offline to the same plan |
 | L9 | `collector.read_integration_head` is extracted from the Stage 2 collector | L7 reuses the exact ref read instead of a copy; Stage 2 behavior is unchanged |
 | L10 | `cli.run` gains an optional `now` clock, used by `plan --live` and `evidence collect` | Tests prove byte-identical live output; production uses the system clock |
+| L11 | `--save-evidence` and `evidence collect --output` write through `factory/output.py`: destination directory resolved and pinned by a descriptor before collection, existing symbolic links refused, snapshot written to an `O_EXCL` temporary file and renamed over the destination, directory identity re-checked before creating and before renaming; refusals exit 64, write failures exit 73 | Review of `efe6c99` found that `write_text` after collection overwrote a project file through an external hard link, and through a symbolic link created at the destination during collection. `evidence collect --output` (Stage 2) had the same flaw and shares the fix |
 
 ## Changes to existing behavior
 
@@ -38,7 +39,12 @@ in-memory snapshots. Stage 4 adds that composition and changes no planning rule.
   by `factory evidence collect`) now include those records under `evidence`, and the text output has
   two more header lines. Plans of the committed simulated fixtures are byte-identical to Stage 3
   (checked against golden files written at `72077a0`).
-- `evidence collect` output, exit codes and messages are unchanged.
+- `evidence collect` writes stdout exactly as before. With `--output`, and for `--save-evidence`:
+  an existing destination is replaced by a new file instead of being rewritten in place (other hard
+  links keep the old contents); an existing symbolic link destination is refused with exit 64 (a link
+  outside the project used to be followed); a write failure exits 73 with a message instead of 70
+  `internal error`; and the refusal message names the option (`--output: <path> must not be inside the
+  project directory ...`).
 
 ## Not done
 

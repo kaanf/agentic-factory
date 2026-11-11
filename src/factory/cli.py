@@ -9,13 +9,15 @@ Exit codes:
     2   invalid input (project or evidence snapshot failed validation)
     3   evidence incomplete (snapshot or live plan written, but some facts could not be collected and
         evaluate as UNKNOWN), or GitHub CLI unusable (nothing written)
-    64  usage error
+    64  usage error (including an output path inside the project, or one that is a symbolic link)
     70  internal error
+    73  the snapshot could not be saved to --output / --save-evidence (nothing replaced, no plan written)
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 from collections.abc import Callable, Sequence
 from datetime import datetime
@@ -28,7 +30,7 @@ from factory.evidence import load_snapshot
 from factory.github import GhCliTransport, GitHubApi, GitHubError, Transport
 from factory.issues import Issue
 from factory.live import plan_live
-from factory.model import Project
+from factory.output import OutputError, SnapshotOutput
 from factory.planning import Plan, evaluate
 from factory.render import plan_text, to_json, validation_document
 from factory.validation import validate_project
@@ -38,6 +40,7 @@ EXIT_INVALID = 2
 EXIT_INCOMPLETE = 3
 EXIT_USAGE = 64
 EXIT_INTERNAL = 70
+EXIT_CANTCREAT = 73
 
 
 class _Parser(argparse.ArgumentParser):
@@ -112,8 +115,12 @@ def _validate(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
     return EXIT_OK
 
 
-def _inside_project(path: Path | None, project: Project) -> bool:
-    return path is not None and path.resolve().is_relative_to(project.root)
+def _output_failed(option: str, exc: OutputError, err: TextIO) -> int:
+    if exc.refused:
+        err.write(f"factory: error: {option}: {exc.message}\n")
+        return EXIT_USAGE
+    err.write(f"error: could not save evidence ({option}): {exc.message}\n")
+    return EXIT_CANTCREAT
 
 
 def _report_collection(errors: list[CollectionError], isolation: dict[str, str], err: TextIO) -> None:
@@ -139,20 +146,26 @@ def _plan(
 
     collection_errors: list[CollectionError] = []
     if args.live:
-        if _inside_project(args.save_evidence, project):
-            err.write("factory: error: --save-evidence must not be inside the project directory (it is read-only)\n")
-            return EXIT_USAGE
-        try:
-            api = GitHubApi(transport or GhCliTransport())
-        except GitHubError as exc:
-            err.write(f"error: {exc.message}\n")
-            return EXIT_INCOMPLETE
-        live = plan_live(project, api, now)
-        if live.issues:
-            return _report_invalid(live.issues, [], args.format, project_id, out, err)
-        assert live.plan is not None
-        if args.save_evidence is not None:
-            args.save_evidence.write_text(to_json(live.snapshot), encoding="utf-8")
+        with contextlib.ExitStack() as stack:
+            output: SnapshotOutput | None = None
+            try:
+                if args.save_evidence is not None:
+                    output = stack.enter_context(SnapshotOutput.prepare(args.save_evidence, project.root))
+                api = GitHubApi(transport or GhCliTransport())
+            except OutputError as exc:
+                return _output_failed("--save-evidence", exc, err)
+            except GitHubError as exc:
+                err.write(f"error: {exc.message}\n")
+                return EXIT_INCOMPLETE
+            live = plan_live(project, api, now)
+            if live.issues:
+                return _report_invalid(live.issues, [], args.format, project_id, out, err)
+            assert live.plan is not None
+            if output is not None:
+                try:
+                    output.save(live.snapshot)
+                except OutputError as exc:
+                    return _output_failed("--save-evidence", exc, err)
         plan: Plan = live.plan
         collection_errors = live.errors
         _report_collection(collection_errors, live.snapshot["credentialIsolation"], err)
@@ -180,20 +193,25 @@ def _collect(
     if result.errors:
         return _report_invalid(result.errors, result.warnings, "text", None, out, err)
     assert project is not None
-    if _inside_project(args.output, project):
-        err.write("factory: error: --output must not be inside the project directory (it is read-only)\n")
-        return EXIT_USAGE
-    try:
-        api = GitHubApi(transport or GhCliTransport())
-    except GitHubError as exc:
-        err.write(f"error: {exc.message}\n")
-        return EXIT_INCOMPLETE
-    collection = collect(project, api, now)
-    document = to_json(collection.snapshot)
-    if args.output is None:
-        out.write(document)
-    else:
-        args.output.write_text(document, encoding="utf-8")
+    with contextlib.ExitStack() as stack:
+        output: SnapshotOutput | None = None
+        try:
+            if args.output is not None:
+                output = stack.enter_context(SnapshotOutput.prepare(args.output, project.root))
+            api = GitHubApi(transport or GhCliTransport())
+        except OutputError as exc:
+            return _output_failed("--output", exc, err)
+        except GitHubError as exc:
+            err.write(f"error: {exc.message}\n")
+            return EXIT_INCOMPLETE
+        collection = collect(project, api, now)
+        if output is None:
+            out.write(to_json(collection.snapshot))
+        else:
+            try:
+                output.save(collection.snapshot)
+            except OutputError as exc:
+                return _output_failed("--output", exc, err)
     _report_collection(collection.errors, collection.snapshot["credentialIsolation"], err)
     return EXIT_INCOMPLETE if collection.errors else EXIT_OK
 

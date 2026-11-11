@@ -7,8 +7,9 @@ Known limitations carried by Factory Core v0.1, as of Stage 4. Classification:
   affects nothing a plan could authorize.
 - **Future security prerequisite**: must be resolved before any consumer can act on a plan (Stage 6).
 
-No item is a Stage 4 blocker. Item 6 was narrowed in Stage 4 (end-of-collection head confirmation);
-nothing else was changed.
+No open item is a Stage 4 blocker. Item 6 was narrowed in Stage 4 (end-of-collection head
+confirmation). The one blocker found in review, evidence output overwriting a project file through a
+hard or symbolic link, was fixed in Stage 4 (decision 0004, L11); its residual race is item 9.
 
 | # | Item | Where | Effect today | Classification |
 |---|---|---|---|---|
@@ -20,3 +21,4 @@ nothing else was changed.
 | 6 | Cross-phase snapshot atomicity | `collector.collect`, `approvals`, `live._confirm_heads` | Narrowed in Stage 4: every recorded head is re-read after collection, and approvals need a confirmed planning head. A head that moves and moves back between reads is not detected, and the plan is stale the moment it is written | **Future security prerequisite**: action-time revalidation |
 | 7 | Simulated evidence authorization boundary | `planning._Evaluator._approval` | `simulated` approvals PASS, so a hand-written snapshot can produce READY. `plan --live` refuses non-`github` evidence, and `authenticated` is always false | **Future security prerequisite**: action-capable consumers must refuse `simulated` provenance |
 | 8 | Credential isolation and action-time revalidation | outside Factory Core (4B P1–P3, D4–D8) | Human authorization is unverifiable; every live approval is UNKNOWN | **Future security prerequisite** |
+| 9 | Evidence output directory moved into the project between the final check and the rename | `output.SnapshotOutput.save` | Needs a process that can already write to the project and to the output directory's parent, acting in a window of a few system calls. Existing project files are never written through; the rename could create or replace one entry in the moved directory. No portable POSIX primitive closes it | Nonblocking hardening |

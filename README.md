@@ -60,8 +60,9 @@ and not human approval.
 | 0 | Success (validate: project valid; plan: plan computed, whatever the task states, and with `--live` every fact collected; collect: every fact collected) |
 | 2 | Invalid input: project or evidence snapshot (file or collected) failed validation |
 | 3 | Collect or `plan --live`: snapshot or plan written but incomplete (missing facts evaluate as UNKNOWN), or the GitHub CLI is unusable |
-| 64 | Usage error |
+| 64 | Usage error, including an `--output` / `--save-evidence` path inside the project or one that is a symbolic link |
 | 70 | Internal error |
+| 73 | `--output` / `--save-evidence` could not be written; the destination is unchanged |
 
 Warnings, such as an architecture profile pinning an old ADR revision, do not change the exit code.
 

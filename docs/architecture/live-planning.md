@@ -14,8 +14,8 @@ factory plan <project-dir> --live [--save-evidence <snapshot.json>] [--format te
 
 Exactly one evidence source is required. Giving neither, or both, is a usage error (exit 64), so
 there is no default source and no fallback from one to the other. `--save-evidence` writes the exact
-validated snapshot the live plan was computed from; it requires `--live` and must not point inside
-the project directory. `factory plan --evidence` behaves exactly as in Stage 3: for every committed
+validated snapshot the live plan was computed from; it requires `--live`, must not point inside
+the project directory, and is written safely (see "Saving evidence safely"). `factory plan --evidence` behaves exactly as in Stage 3: for every committed
 simulated fixture its output is byte-identical to the Stage 3 merge (golden files in
 `tests/fixtures/plans/`).
 
@@ -67,6 +67,44 @@ authorization: unverifiable (credential isolation: <status>)`. Hand-written snap
 record, so their plans are unchanged. A `github` snapshot file planned with `--evidence` now shows
 them too. That is an additive change for existing consumers; the planner still does not judge them.
 
+## Saving evidence safely (`--save-evidence`, `evidence collect --output`)
+
+Both options write through `factory/output.py`. Collection takes time, so the destination is checked
+before collection and written after it; the design keeps the write from being redirected into the
+project in between.
+
+| Property | How |
+|---|---|
+| Never inside the project | The destination's directory is resolved with every symbolic link removed; the directory, or the destination in it, inside the project is refused (exit 64) before any GitHub request |
+| Never through a symbolic link | An existing destination that is a symbolic link (to anywhere) is refused (exit 64). A link created at the destination during collection is replaced, not followed |
+| Never into an existing file | The snapshot goes to a new temporary file (`O_CREAT \| O_EXCL \| O_NOFOLLOW`) in the destination's directory and is renamed over the destination name. The old file's contents are never truncated or rewritten, so a hard link to it (including one to a project file) keeps its contents |
+| Same directory as checked | The directory is opened before collection, and all later operations are relative to that descriptor. Just before the temporary file is created, and again before the rename, the directory's path must still resolve to itself and name the same directory (device and inode). Otherwise nothing is saved (exit 73) |
+| No partial output | The temporary file is written completely and `fsync`ed before the rename, which is atomic; on any failure, including an interrupt, the temporary file is removed and the destination is unchanged |
+| Fail closed | A platform without directory-relative file operations is refused (exit 73) |
+
+**Overwrite.** Replacing an existing regular file stays allowed, as in Stage 2 and 3, but now
+replaces the directory entry: the new file has a new inode and default permissions (`0666` minus the
+umask), other hard links to the old file keep the old contents, and an existing symbolic link,
+directory or other non-regular file at the destination is refused. Before this change, the file was
+truncated and rewritten in place, and a destination symbolic link outside the project was followed.
+
+**Exit codes.** 64 for a refused destination (inside the project, symbolic link, directory), checked
+before any GitHub request. 73 when the snapshot cannot be written (directory missing, unwritable, moved
+or replaced, disk full, serialization or rename failure). With exit 73 nothing is printed to stdout and
+the destination is left as it was.
+
+**Remaining limitations.**
+
+- In the window between the last directory check and the rename, a process that can write to both the
+  output directory's parent and the project can still move the output directory into the project; the
+  rename would then create or replace an entry there. POSIX has no portable way to rule this out. It
+  requires an attacker who can already modify the project.
+- If the directory is moved into the project after the first check, the temporary file can exist there
+  briefly before the second check removes it.
+- Durability of the rename itself is not forced (the directory is not `fsync`ed); after a crash the
+  destination holds either the old or the complete new snapshot.
+- Paths on network or FUSE file systems are only as safe as their `rename` and `O_NOFOLLOW` semantics.
+
 ## Exit codes
 
 | Code | `plan --evidence` | `plan --live` |
@@ -74,8 +112,9 @@ them too. That is an additive change for existing consumers; the planner still d
 | 0 | Plan computed | Plan computed and every fact collected and confirmed |
 | 2 | Project or snapshot invalid | Project invalid, or the collected snapshot failed validation (no plan) |
 | 3 | n/a | Plan written, but some facts could not be collected or confirmed and evaluate as UNKNOWN; or the GitHub CLI is unusable (nothing written) |
-| 64 | Usage error | Usage error, including both or neither source, or `--save-evidence` misuse |
+| 64 | Usage error | Usage error, including both or neither source, or a refused `--save-evidence` destination |
 | 70 | Internal error | Internal error |
+| 73 | n/a | `--save-evidence` could not be written; nothing printed, destination unchanged |
 
 Exit 0 says only that the evidence is complete. It is not authorization: a complete live plan still
 has `authenticated: false`, and no task in it can be READY (see below).

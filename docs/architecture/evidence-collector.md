@@ -44,8 +44,10 @@ PR bodies, comments and any agent output are never read.
   all further requests for that collection. Every fact not yet collected is absent.
 - **Exit codes:** 0 when everything was collected; 3 when the snapshot was written but is
   incomplete (each missing fact is listed on stderr and in `collection.errors`), or when the GitHub
-  CLI is unusable; 2 for an invalid project; 64 for usage errors, including `--output` inside the
-  project directory.
+  CLI is unusable; 2 for an invalid project; 64 for usage errors, including an `--output` path inside
+  the project directory or one that is a symbolic link; 73 when `--output` cannot be written.
+- `--output` is written atomically through a temporary file and never through an existing file or
+  link; see "Saving evidence safely" in [live-planning.md](live-planning.md).
 - The collector validates its own output against the snapshot schema before writing it.
 
 ## Safety
