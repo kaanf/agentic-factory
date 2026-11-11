@@ -59,6 +59,8 @@ class Manifest:
     adr_directory: str
     profile_refs: tuple[ProfileRef, ...]
     dispatch_enabled: bool
+    # Where the project directory sits inside the planning repository ("" for the repository root).
+    planning_directory: str = ""
 
     def repository(self, repo_id: str) -> Repository | None:
         return next((repo for repo in self.repositories if repo.id == repo_id), None)

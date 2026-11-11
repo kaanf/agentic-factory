@@ -226,12 +226,24 @@ class _Evaluator:
         if entry.sha256 != current:
             return [], [_fail(changed_code, f"{what} {path} changed after the approved revision", path)]
         if not entry.approved:
-            return [_fail("NOT_APPROVED", f"{what} {path} is not approved", path)], []
+            detail = f" ({entry.evidence})" if entry.evidence else ""
+            return [_fail("NOT_APPROVED", f"{what} {path} is not approved{detail}", path)], []
         if entry.merged_by not in self.manifest.approvers:
             merged_by = entry.merged_by or "nobody"
             return [
                 _fail(
                     "APPROVER_NOT_AUTHORIZED", f"{what} {path} was merged by {merged_by}, who is not an approver", path
+                )
+            ], []
+        # A GitHub login proves which credential merged, not which person. A collected snapshot
+        # stays unverifiable even if the marker was edited out.
+        if entry.human_authorization is not None or self.snapshot.provenance == "github":
+            return [
+                _unknown(
+                    "HUMAN_AUTHORIZATION_UNVERIFIABLE",
+                    f"{what} {path} was merged on GitHub by {entry.merged_by}, but that login does not prove a human "
+                    "approved it while agents can use the approver's credentials",
+                    path,
                 )
             ], []
         return [], []

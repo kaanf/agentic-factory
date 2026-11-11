@@ -154,6 +154,7 @@ def _manifest(document: dict[str, Any], file: str) -> Manifest:
         adr_directory=architecture["adrDirectory"],
         profile_refs=tuple(ProfileRef(p["id"], p["repository"], p["path"]) for p in architecture["profiles"]),
         dispatch_enabled=bool(document["dispatch"].get("enabled", False)),
+        planning_directory=document.get("planningDirectory", ""),
     )
 
 

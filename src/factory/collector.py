@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from factory import __version__
+from factory.approvals import collect_approvals, credential_isolation
 from factory.documents import DocumentError, parse_yaml
 from factory.github import GitHubApi, GitHubError, path_of, segment
 from factory.model import Output, Project, Repository, Task
@@ -39,7 +40,7 @@ CHECK_CONCLUSIONS = frozenset(
 )
 APPROVALS_NOTE = (
     "collected read-only from the GitHub REST API by the GitHub CLI; the planner cannot verify this file's integrity, "
-    "and approvals are not collected, so every approval is UNKNOWN"
+    "and approvals record GitHub merge provenance only: human authorization is unverifiable, so no approval passes"
 )
 
 
@@ -291,15 +292,19 @@ def collect(project: Project, api: GitHubApi, now: Callable[[], datetime] | None
         facts = _RepositoryCollector(api, repo, tasks, errors).collect()
         if facts is not None:
             repositories[repo.id] = facts
+    approvals, approval_errors = collect_approvals(project, api)
+    errors.extend(CollectionError(project.manifest.planning_repository, f, m) for f, m in approval_errors)
+    isolation = credential_isolation(api, project.manifest.approvers)
 
     errors.sort()
     snapshot: dict[str, Any] = {
-        "approvals": [],
+        "approvals": approvals,
         "collection": {
             "collector": f"factory {__version__}",
             "complete": not errors,
             "errors": [e.to_dict() for e in errors],
         },
+        "credentialIsolation": isolation,
         "observedAt": observed_at,
         "project": project.manifest.project_id,
         "provenance": {"kind": "github", "note": APPROVALS_NOTE},

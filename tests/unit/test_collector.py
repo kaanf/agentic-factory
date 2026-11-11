@@ -20,6 +20,7 @@ from github_support import (
     identity,
     job,
     listing,
+    not_found,
     page,
     pull,
     q,
@@ -124,6 +125,10 @@ def world(head: str = M, **commit: Any) -> dict[str, Any]:
         f"{BASE}/git/ref/heads/dev": ref(head),
         page(f"{BASE}/pulls", head=f"example-org:{BRANCH}", state="all"): [pull(7, BRANCH, merged_sha=M)],
         q(f"{BASE}/contents/api/openapi.yaml", ref=head): contents(CONTRACT),
+        # Approval records (tests/unit/test_approvals.py covers them): neither file is on the integration head.
+        q(f"{BASE}/contents/factory/profiles/svc.yaml", ref=head): not_found(),
+        q(f"{BASE}/contents/factory/tasks/SVC-1.yaml", ref=head): not_found(),
+        "user": Response(401, {"message": "Requires authentication"}),
     }
     responses.update(commit_responses(M, head=head, **commit))
     return responses
@@ -136,10 +141,12 @@ def run_collection(
     assert loaded is not None
     transport = FakeTransport(responses)
     result = collect(loaded, GitHubApi(transport), now=CLOCK)
-    # The collector never produces approvals (Stage 3). Add simulated ones, for planning only, so
-    # the levels above 'approved' reflect the collected GitHub facts rather than missing approvals.
+    # Collected approvals can never pass (human authorization is unverifiable; see test_approvals.py).
+    # Replace them with simulated ones, and label the snapshot simulated, so the levels above
+    # 'approved' reflect the collected GitHub facts rather than the approval trust boundary.
     planned = {
         **result.snapshot,
+        "provenance": {"kind": "simulated", "note": "collected facts with simulated approvals"},
         "approvals": [
             {"approved": True, "mergedBy": "example-human", "path": f, "sha256": loaded.digests[f]}
             for f in ("factory/tasks/SVC-1.yaml", "factory/profiles/svc.yaml")
@@ -170,7 +177,10 @@ def test_merged_pr_with_exact_sha_push_ci_is_validated(project: Path, tmp_path: 
     assert snapshot["provenance"]["kind"] == "github"
     assert snapshot["collection"] == {"collector": "factory 0.1.0", "complete": True, "errors": []}
     assert snapshot["observedAt"] == "2026-11-11T12:00:00Z"
-    assert snapshot["approvals"] == []
+    assert [(a["path"], a["approved"], a["evidence"]) for a in snapshot["approvals"]] == [
+        ("factory/profiles/svc.yaml", False, "NOT_ON_INTEGRATION_BRANCH"),
+        ("factory/tasks/SVC-1.yaml", False, "NOT_ON_INTEGRATION_BRANCH"),
+    ]
     facts = snapshot["repositories"]["svc"]
     assert facts["integrationHead"] == M
     assert facts["commits"][M]["outputs"] == {"svc-contract": {"present": True, "version": "1.2.0"}}
@@ -180,7 +190,8 @@ def test_merged_pr_with_exact_sha_push_ci_is_validated(project: Path, tmp_path: 
 def test_collector_only_issues_get_requests_to_repos_paths(project: Path, tmp_path: Path) -> None:
     _, _, transport = run_collection(project, world(), tmp_path)
     assert transport.requests
-    assert all(r.startswith(f"repos/{REPO}") for r in transport.requests)
+    # The one exception is the collector's own identity, read for the credential-isolation record.
+    assert all(r.startswith(f"repos/{REPO}") or r == "user" for r in transport.requests)
 
 
 # -- PR head CI is not integration evidence --------------------------------------
@@ -439,6 +450,8 @@ def test_validated_merge_but_unvalidated_new_head(project: Path, tmp_path: Path)
 def test_integration_head_moving_during_collection(project: Path, tmp_path: Path) -> None:
     responses = world()
     responses[f"{BASE}/git/ref/heads/dev"] = Sequence([ref(M), ref(H2)])
+    for path in ("factory/profiles/svc.yaml", "factory/tasks/SVC-1.yaml"):
+        responses[q(f"{BASE}/contents/{path}", ref=H2)] = not_found()
     snapshot, task, _ = run_collection(project, responses, tmp_path)
     facts = snapshot["repositories"]["svc"]
     assert "integrationHead" not in facts
@@ -472,15 +485,19 @@ def test_transport_failure_is_unknown(project: Path, tmp_path: Path) -> None:
 
 
 def test_inaccessible_repository_yields_no_facts(project: Path, tmp_path: Path) -> None:
-    snapshot, task, transport = run_collection(project, {BASE: Response(404, {"message": "Not Found"})}, tmp_path)
+    responses = {BASE: Response(404, {"message": "Not Found"}), "user": Response(401, {})}
+    snapshot, task, transport = run_collection(project, responses, tmp_path)
     assert snapshot["repositories"] == {}
-    assert transport.requests == [BASE]
+    assert snapshot["approvals"] == []
+    assert transport.requests == [BASE, BASE, "user"]
     assert level(task, "merged") == ("UNKNOWN", {"PR_EVIDENCE_MISSING"})
 
 
 def test_renamed_repository_is_not_trusted(project: Path, tmp_path: Path) -> None:
-    snapshot, _, transport = run_collection(project, {BASE: identity("example-org/renamed-svc")}, tmp_path)
+    responses = {BASE: identity("example-org/renamed-svc"), "user": Response(401, {})}
+    snapshot, _, transport = run_collection(project, responses, tmp_path)
     assert snapshot["repositories"] == {}
+    assert snapshot["approvals"] == []
     assert "renamed or transferred" in snapshot["collection"]["errors"][0]["message"]
 
 

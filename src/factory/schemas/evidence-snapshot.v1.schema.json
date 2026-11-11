@@ -45,6 +45,17 @@
         }
       }
     },
+    "credentialIsolation": {
+      "description": "Written by the collector. Records why human authorization of merges cannot be verified. There is deliberately no 'verified' status in v1.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "identity", "message"],
+      "properties": {
+        "status": {"enum": ["shared", "unverified"]},
+        "identity": {"type": ["string", "null"]},
+        "message": {"type": "string"}
+      }
+    },
     "approvals": {
       "description": "One entry per approved-or-not artifact (task, profile or ADR file), keyed by project-relative path.",
       "type": "array",
@@ -57,7 +68,17 @@
           "sha256": {"$ref": "#/$defs/sha256"},
           "approved": {"type": "boolean"},
           "mergedBy": {"type": ["string", "null"]},
-          "pullRequest": {"type": ["integer", "null"], "minimum": 1}
+          "pullRequest": {"type": ["integer", "null"], "minimum": 1},
+          "commit": {"description": "Latest commit on the integration branch that changed the file.", "$ref": "#/$defs/commitSha"},
+          "mergeCommit": {"$ref": "#/$defs/commitSha"},
+          "evidence": {
+            "description": "Collector finding for the file at the integration head. MERGED_PULL_REQUEST is GitHub provenance only, never proof of human approval.",
+            "enum": ["MERGED_PULL_REQUEST", "NOT_ON_INTEGRATION_BRANCH", "NO_PULL_REQUEST", "PR_NOT_INTO_INTEGRATION_BRANCH", "PR_NOT_MERGED", "CONTENT_PRESENT_BEFORE_MERGE"]
+          },
+          "humanAuthorization": {
+            "description": "Whether the merge can be attributed to a human. v1 has no way to verify this, so the only value is 'unverifiable', and the planner never lets such an approval pass.",
+            "const": "unverifiable"
+          }
         }
       }
     },

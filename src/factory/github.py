@@ -1,7 +1,7 @@
 """Read-only GitHub REST access through the authenticated GitHub CLI.
 
-Only GET requests to ``repos/...`` paths on the CLI's default host are possible: there is no
-code path that writes to GitHub. Callers receive parsed JSON or a ``GitHubError``.
+Only GET requests to ``repos/...`` paths and ``user`` (the identity the CLI is using) on the
+CLI's default host are possible: there is no code path that writes to GitHub. Callers receive parsed JSON or a ``GitHubError``.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from urllib.parse import quote, urlencode
 
 API_VERSION = "2022-11-28"
 PAGE_SIZE = 100
-_PATH = re.compile(r"^repos/[A-Za-z0-9-]+/[A-Za-z0-9._-]+(/[^?#\s]*)?(\?[^#\s]*)?$")
+_PATH = re.compile(r"^(?:user|repos/[A-Za-z0-9-]+/[A-Za-z0-9._-]+(/[^?#\s]*)?(\?[^#\s]*)?)$")
 _DOT_SEGMENT = re.compile(r"(^|/)(\.|%2e){1,2}(/|\?|$)", re.IGNORECASE)
 
 
@@ -86,7 +86,7 @@ class GhCliTransport:
 
     def get(self, path: str) -> Response:
         if not _PATH.match(path) or _DOT_SEGMENT.search(path.split("?", 1)[0]):
-            raise GitHubError(f"refusing request outside repos/: {path}")
+            raise GitHubError(f"refusing request outside repos/ and user: {path}")
         command = [
             self.executable,
             "api",
@@ -127,7 +127,7 @@ class GitHubApi:
         self.max_pages = max_pages
         self.rate_limited = False
 
-    def get(self, path: str, **params: str | int) -> Any:
+    def get(self, path: str, /, **params: str | int) -> Any:
         if self.rate_limited:
             raise RateLimitError("not requested: GitHub rate limit was reached earlier in this collection")
         url = f"{path}?{urlencode(sorted(params.items()))}" if params else path
@@ -140,7 +140,7 @@ class GitHubApi:
             raise GitHubError(f"HTTP {response.status} {message}".strip(), response.status)
         return response.body
 
-    def get_list(self, path: str, key: str | None = None, **params: str | int) -> list[Any]:
+    def get_list(self, path: str, /, key: str | None = None, **params: str | int) -> list[Any]:
         """Fetch every page of a list endpoint. Raises if completeness cannot be confirmed.
 
         ``key`` names the array inside an object response (e.g. ``check_runs``); such responses

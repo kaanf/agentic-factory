@@ -8,6 +8,7 @@ project (read-only GET requests against the public kaanf/agentic-factory reposit
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -53,8 +54,12 @@ class RecordingTransport:
 
     def get(self, path: str) -> Response:
         response = self.inner.get(path)
-        self.recorded[path] = {"body": response.body, "status": response.status}
-        return response
+        body = response.body
+        if path == "user" and isinstance(body, dict):
+            # The authenticated user's profile holds private fields; only the login is used.
+            body = {"login": body.get("login")}
+        self.recorded[path] = {"body": body, "status": response.status}
+        return Response(response.status, body, response.headers)
 
 
 def load_recorded() -> FakeTransport:
@@ -65,13 +70,13 @@ def load_recorded() -> FakeTransport:
 # -- request paths --------------------------------------------------------------
 
 
-def q(path: str, **params: str | int) -> str:
+def q(path: str, /, **params: str | int) -> str:
     from urllib.parse import urlencode
 
     return f"{path}?{urlencode(sorted(params.items()))}" if params else path
 
 
-def page(path: str, **params: str | int) -> str:
+def page(path: str, /, **params: str | int) -> str:
     return q(path, page=1, per_page=100, **params)
 
 
@@ -162,7 +167,30 @@ def listing(key: str, items: list[Any]) -> dict[str, Any]:
 
 
 def contents(text: str) -> dict[str, Any]:
-    return {"content": base64.b64encode(text.encode()).decode(), "encoding": "base64", "type": "file"}
+    data = text.encode()
+    return {
+        "content": base64.b64encode(data).decode(),
+        "encoding": "base64",
+        "sha": hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest(),
+        "type": "file",
+    }
+
+
+def not_found() -> Response:
+    return Response(404, {"message": "Not Found"})
+
+
+def commit_entry(sha: str, parents: list[str] | None = None) -> dict[str, Any]:
+    return {"parents": [{"sha": p} for p in (parents or [])], "sha": sha}
+
+
+def pull_detail(
+    number: int, branch: str, *, merged_sha: str | None, merged_by: str | None = "example-human", base: str = "dev"
+) -> dict[str, Any]:
+    detail = pull(number, branch, base=base, merged_sha=merged_sha)
+    detail["merged"] = merged_sha is not None
+    detail["merged_by"] = {"login": merged_by} if merged_sha and merged_by else None
+    return detail
 
 
 if __name__ == "__main__":

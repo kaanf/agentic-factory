@@ -144,6 +144,8 @@ def _collect(args: argparse.Namespace, out: TextIO, err: TextIO, transport: Tran
         out.write(document)
     else:
         args.output.write_text(document, encoding="utf-8")
+    isolation = collection.snapshot["credentialIsolation"]
+    err.write(f"warning: human authorization unverifiable: {isolation['message']}\n")
     for error in collection.errors:
         err.write(f"incomplete: {error.render()}\n")
     if collection.errors:
