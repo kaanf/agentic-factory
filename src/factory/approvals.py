@@ -20,12 +20,15 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import re
+from datetime import datetime
 from typing import Any
 
 from factory.github import GitHubApi, GitHubError, path_of, segment
 from factory.model import Project, Repository
 
 UNVERIFIABLE = "unverifiable"
+_SHA = re.compile(r"^[0-9a-f]{40}$")
 
 
 class _Unresolved(GitHubError):
@@ -34,6 +37,33 @@ class _Unresolved(GitHubError):
 
 def git_blob_sha(data: bytes) -> str:
     return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def _is_sha(value: Any) -> bool:
+    return isinstance(value, str) and _SHA.match(value) is not None
+
+
+def _merged_at(pr: dict[str, Any], what: str) -> str | None:
+    """The merge time of a pull request record, or None if the record shows it was not merged.
+
+    Only an explicit ``merged_at: null`` on a record with a valid state shows that. An absent,
+    malformed or contradictory merge status is not evidence either way.
+    """
+    if "merged_at" not in pr:
+        raise _Unresolved(f"{what} has no merge status")
+    merged_at, state, merged = pr["merged_at"], pr.get("state"), pr.get("merged")
+    if state not in ("open", "closed"):
+        raise _Unresolved(f"{what} has no valid state")
+    if merged_at is not None:
+        try:
+            if not isinstance(merged_at, str) or datetime.fromisoformat(merged_at).tzinfo is None:
+                raise ValueError
+        except ValueError:
+            raise _Unresolved(f"{what} has a malformed merge time {merged_at!r}") from None
+    # Only detail records carry ``merged``; where present it must agree with ``merged_at``.
+    if (merged is not None and merged is not (merged_at is not None)) or (state == "open" and merged_at is not None):
+        raise _Unresolved(f"{what} has a contradictory merge status (state {state!r}, merged {merged!r})")
+    return merged_at
 
 
 def credential_isolation(api: GitHubApi, approvers: tuple[str, ...]) -> dict[str, Any]:
@@ -95,6 +125,19 @@ class _ApprovalCollector:
             raise _Unresolved(f"{path} at {ref}: content does not match its blob SHA")
         return data
 
+    def _identity(self, pr: Any, what: str) -> tuple[int, str]:
+        """The number and base branch of a pull request record, which must target the planning repository."""
+        if not isinstance(pr, dict):
+            raise _Unresolved(f"{what} is not a pull request record")
+        number, base = pr.get("number"), pr.get("base")
+        valid_number = isinstance(number, int) and not isinstance(number, bool) and number > 0
+        if not valid_number or not isinstance(base, dict) or not isinstance(base.get("ref"), str):
+            raise _Unresolved(f"{what} has no valid number or base branch")
+        full_name = base["repo"].get("full_name") if isinstance(base.get("repo"), dict) else None
+        if not isinstance(full_name, str) or full_name.lower() != self.repo.github.lower():
+            raise _Unresolved(f"{what} targets repository {full_name!r}, not {self.repo.github}")
+        return number, base["ref"]
+
     def _reachable(self, sha: str, head: str) -> bool:
         status = self.api.get(f"{self.base}/compare/{segment(sha)}...{segment(head)}").get("status")
         if status in ("ahead", "identical"):
@@ -129,8 +172,10 @@ class _ApprovalCollector:
         }
 
         associated = self.api.get_list(f"{self.base}/commits/{segment(commit)}/pulls")
-        into = [p for p in associated if p["base"]["ref"] == self.repo.integration_branch]
-        merged = [p for p in into if p.get("merged_at")]
+        branch = self.repo.integration_branch
+        into = [p for p in associated if self._identity(p, "an associated pull request")[1] == branch]
+        # Every record into the branch must have a definite merge status before any is judged.
+        merged = [p for p in into if _merged_at(p, f"pull request #{p['number']}") is not None]
         if not associated:
             return {**entry, "evidence": "NO_PULL_REQUEST"}
         if not into:
@@ -141,16 +186,23 @@ class _ApprovalCollector:
             numbers = ", ".join(f"#{p['number']}" for p in sorted(merged, key=lambda p: p["number"]))
             raise _Unresolved(f"commit {commit} belongs to several merged pull requests ({numbers})")
 
-        number: int = merged[0]["number"]
+        listed = merged[0]
+        number: int = listed["number"]
+        what = f"pull request #{number}"
         pr = self.api.get(f"{self.base}/pulls/{number}")
+        returned, base_ref = self._identity(pr, what)
+        if returned != number:
+            raise _Unresolved(f"requested {what}, but GitHub returned #{returned}")
+        if pr.get("merged") is not True or base_ref != branch or _merged_at(pr, what) is None:
+            raise _Unresolved(f"{what} is listed as merged into the integration branch, but is not")
+        if pr["merged_at"] != listed["merged_at"]:
+            raise _Unresolved(f"{what} reports two different merge times")
         merge_sha = pr.get("merge_commit_sha")
-        merged_by = (pr.get("merged_by") or {}).get("login")
-        if pr.get("merged") is not True or pr["base"]["ref"] != self.repo.integration_branch:
-            raise _Unresolved(f"pull request #{number} is listed as merged into the integration branch, but is not")
-        if not merge_sha or not merged_by:
-            raise _Unresolved(f"pull request #{number} has no recorded merge commit or merge actor")
-        if merged[0].get("merge_commit_sha") != merge_sha:
-            raise _Unresolved(f"pull request #{number} reports two different merge commits")
+        merged_by = pr["merged_by"].get("login") if isinstance(pr.get("merged_by"), dict) else None
+        if not _is_sha(merge_sha) or not isinstance(merged_by, str) or not merged_by:
+            raise _Unresolved(f"{what} has no recorded merge commit or merge actor")
+        if listed.get("merge_commit_sha") != merge_sha:
+            raise _Unresolved(f"{what} reports two different merge commits")
         if not self._reachable(merge_sha, head):
             raise _Unresolved(f"merge commit {merge_sha} of #{number} is not reachable from the integration head")
         at_merge = self._file(repo_path, merge_sha)
@@ -158,12 +210,22 @@ class _ApprovalCollector:
             raise _Unresolved(f"{repo_path} at merge commit {merge_sha} differs from the integration head")
 
         entry |= {"mergeCommit": merge_sha, "mergedBy": merged_by, "pullRequest": number}
-        parents = self.api.get(f"{self.base}/commits/{segment(merge_sha)}")["parents"]
-        if parents:
-            before = self._file(repo_path, parents[0]["sha"])
-            if before is not None and hashlib.sha256(before).hexdigest() == digest:
-                # The content was already on the integration branch: this PR did not introduce it.
-                return {**entry, "evidence": "CONTENT_PRESENT_BEFORE_MERGE"}
+        record = self.api.get(f"{self.base}/commits/{segment(merge_sha)}")
+        if not isinstance(record, dict) or record.get("sha") != merge_sha:
+            raise _Unresolved(f"the commit record requested for {merge_sha} describes another commit")
+        parents = record.get("parents")
+        if (
+            not isinstance(parents, list)
+            or not parents
+            or not isinstance(parents[0], dict)
+            or not _is_sha(parents[0].get("sha"))
+        ):
+            # Without the first parent nothing shows that this PR introduced the content.
+            raise _Unresolved(f"merge commit {merge_sha} of #{number} has no valid first parent")
+        before = self._file(repo_path, parents[0]["sha"])
+        if before is not None and hashlib.sha256(before).hexdigest() == digest:
+            # The content was already on the integration branch: this PR did not introduce it.
+            return {**entry, "evidence": "CONTENT_PRESENT_BEFORE_MERGE"}
         return {**entry, "approved": True, "evidence": "MERGED_PULL_REQUEST"}
 
     def collect(self, paths: list[str]) -> list[dict[str, Any]]:

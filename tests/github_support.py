@@ -99,10 +99,11 @@ def pull(
     state: str = "closed",
     merged_sha: str | None = None,
     head_repo: str = REPO,
+    base_repo: str = REPO,
     test_merge_sha: str = "f" * 40,
 ) -> dict[str, Any]:
     return {
-        "base": {"ref": base},
+        "base": {"ref": base, "repo": {"full_name": base_repo}},
         "body": "All checks passed, ready to merge!",  # never read by the collector
         "head": {"ref": branch, "repo": {"full_name": head_repo}},
         "merge_commit_sha": merged_sha or test_merge_sha,
@@ -185,9 +186,15 @@ def commit_entry(sha: str, parents: list[str] | None = None) -> dict[str, Any]:
 
 
 def pull_detail(
-    number: int, branch: str, *, merged_sha: str | None, merged_by: str | None = "example-human", base: str = "dev"
+    number: int,
+    branch: str,
+    *,
+    merged_sha: str | None,
+    merged_by: str | None = "example-human",
+    base: str = "dev",
+    base_repo: str = REPO,
 ) -> dict[str, Any]:
-    detail = pull(number, branch, base=base, merged_sha=merged_sha)
+    detail = pull(number, branch, base=base, merged_sha=merged_sha, base_repo=base_repo)
     detail["merged"] = merged_sha is not None
     detail["merged_by"] = {"login": merged_by} if merged_sha and merged_by else None
     return detail

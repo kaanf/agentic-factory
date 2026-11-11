@@ -479,6 +479,221 @@ def test_integration_head_moving_drops_every_approval(project: Path) -> None:
     } in snapshot["collection"]["errors"]
 
 
+# -- malformed records: never positive provenance, never an unjustified definite rejection -----
+
+
+def _listed(**fields: Any) -> list[dict[str, Any]]:
+    """PR #7 as the commit's associated-PR listing returns it, with ``fields`` replaced."""
+    return [{**pull(7, BRANCH, merged_sha=MERGE), **fields}]
+
+
+def _listed_without(field: str) -> list[dict[str, Any]]:
+    record = pull(7, BRANCH, merged_sha=MERGE)
+    del record[field]
+    return [record]
+
+
+def _detail(**fields: Any) -> dict[str, Any]:
+    """PR #7's detail record, with ``fields`` replaced."""
+    return {**pull_detail(7, BRANCH, merged_sha=MERGE), **fields}
+
+
+def _detail_without(field: str) -> dict[str, Any]:
+    record = pull_detail(7, BRANCH, merged_sha=MERGE)
+    del record[field]
+    return record
+
+
+def assert_omitted(project: Path, tmp_path: Path, snapshot: dict[str, Any], message: str) -> None:
+    assert entry(snapshot) is None
+    assert entry(snapshot, PROFILE) is not None  # only the affected artifact is dropped
+    errors = snapshot["collection"]["errors"]
+    assert [e["fact"] for e in errors] == [f"approvals.{TASK}"]
+    assert message in errors[0]["message"]
+    assert snapshot["collection"]["complete"] is False
+    task = planned(project, snapshot, tmp_path)
+    assert approval_reasons(task) == ("UNKNOWN", {"APPROVAL_EVIDENCE_MISSING"})
+    assert task["state"] == "UNKNOWN"
+
+
+NO_FIRST_PARENT = "has no valid first parent"
+
+
+@pytest.mark.parametrize(
+    ("record", "message"),
+    [
+        pytest.param({"parents": None, "sha": MERGE}, NO_FIRST_PARENT, id="parents-null"),
+        pytest.param({"parents": {}, "sha": MERGE}, NO_FIRST_PARENT, id="parents-empty-object"),
+        pytest.param({"parents": False, "sha": MERGE}, NO_FIRST_PARENT, id="parents-false"),
+        pytest.param({"parents": [], "sha": MERGE}, NO_FIRST_PARENT, id="parents-empty-array"),
+        pytest.param({"sha": MERGE}, NO_FIRST_PARENT, id="parents-missing"),
+        pytest.param({"parents": [PARENT], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-not-a-record"),
+        pytest.param({"parents": [{"url": "x"}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-without-sha"),
+        pytest.param({"parents": [{"sha": "HEAD~1"}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-sha-malformed"),
+        pytest.param({"parents": [{"sha": PARENT}], "sha": FEATURE}, "describes another commit", id="other-commit"),
+        pytest.param({"parents": [{"sha": PARENT}]}, "describes another commit", id="commit-sha-missing"),
+        pytest.param([], "describes another commit", id="not-a-commit-record"),
+    ],
+)
+def test_merge_commit_without_a_valid_first_parent_is_omitted(
+    project: Path, tmp_path: Path, record: Any, message: str
+) -> None:
+    """Without the first parent, nothing shows that this PR introduced the content."""
+    responses = approved_world(project)
+    responses[f"{BASE}/commits/{MERGE}"] = record
+    snapshot, _ = collected(project, responses)
+    assert_omitted(project, tmp_path, snapshot, message)
+
+
+def test_valid_two_parent_merge_commit_is_checked_against_its_first_parent(project: Path) -> None:
+    responses = approved_world(project)
+    responses[f"{BASE}/commits/{MERGE}"] = commit_entry(MERGE, [PARENT, FEATURE])
+    snapshot, transport = collected(project, responses)
+    assert (entry(snapshot)["approved"], entry(snapshot)["evidence"]) == (True, "MERGED_PULL_REQUEST")
+    assert q(f"{BASE}/contents/{TASK}", ref=PARENT) in transport.requests
+    assert snapshot["collection"]["complete"] is True
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        pytest.param({"detail": _detail(number=999)}, "GitHub returned #999", id="detail-wrong-number"),
+        pytest.param(
+            {"detail": pull_detail(7, BRANCH, merged_sha=MERGE, base_repo="other/repo")},
+            "targets repository 'other/repo'",
+            id="detail-wrong-base-repository",
+        ),
+        pytest.param(
+            {"associated": [pull(7, BRANCH, merged_sha=MERGE, base_repo="other/repo")]},
+            "targets repository 'other/repo'",
+            id="listing-wrong-base-repository",
+        ),
+        pytest.param(
+            {"detail": pull_detail(7, BRANCH, merged_sha=MERGE, base="main")},
+            "listed as merged into the integration branch, but is not",
+            id="detail-wrong-base-branch",
+        ),
+        pytest.param(
+            {"detail": _detail(merge_commit_sha=sha("another merge"))},
+            "two different merge commits",
+            id="listing-and-detail-merge-commits-differ",
+        ),
+        pytest.param(
+            {"detail": _detail(merge_commit_sha="not-a-sha")},
+            "no recorded merge commit or merge actor",
+            id="detail-merge-commit-malformed",
+        ),
+        pytest.param(
+            {"detail": _detail(merged_by={"login": 42})},
+            "no recorded merge commit or merge actor",
+            id="detail-merge-actor-malformed",
+        ),
+        pytest.param({"detail": _detail_without("number")}, "no valid number", id="detail-number-missing"),
+        pytest.param({"detail": _detail(number="7")}, "no valid number", id="detail-number-not-an-integer"),
+        pytest.param({"detail": _detail_without("base")}, "no valid number", id="detail-base-missing"),
+        pytest.param(
+            {"detail": _detail(base={"ref": "dev"})}, "targets repository None", id="detail-base-repository-missing"
+        ),
+        pytest.param(
+            {"associated": _listed(base={"ref": "dev"})},
+            "targets repository None",
+            id="listing-base-repository-missing",
+        ),
+        pytest.param({"associated": _listed_without("number")}, "no valid number", id="listing-number-missing"),
+        pytest.param({"associated": [None]}, "not a pull request record", id="listing-record-not-an-object"),
+    ],
+)
+def test_contradictory_or_incomplete_pull_request_identity_is_omitted(
+    project: Path, tmp_path: Path, change: dict[str, Any], message: str
+) -> None:
+    snapshot, _ = collected(project, approved_world(project, **change))
+    assert_omitted(project, tmp_path, snapshot, message)
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        pytest.param({"associated": _listed_without("merged_at")}, "no merge status", id="listing-merged-at-missing"),
+        pytest.param(
+            {"associated": _listed(merged_at="yesterday")}, "malformed merge time", id="listing-merged-at-malformed"
+        ),
+        pytest.param({"associated": _listed(merged_at="")}, "malformed merge time", id="listing-merged-at-empty"),
+        pytest.param(
+            {"associated": _listed(merged_at=1762844400)}, "malformed merge time", id="listing-merged-at-number"
+        ),
+        pytest.param({"associated": _listed(merged_at=False)}, "malformed merge time", id="listing-merged-at-false"),
+        pytest.param(
+            {"associated": [{**pull(7, BRANCH), "state": None}]}, "no valid state", id="unmerged-listing-state-missing"
+        ),
+        pytest.param({"associated": _listed(state="open")}, "contradictory merge status", id="open-but-merged"),
+        pytest.param(
+            {"associated": _listed(merged=False)}, "contradictory merge status", id="listing-merged-flag-disagrees"
+        ),
+        pytest.param(
+            {"associated": [{**pull(7, BRANCH), "merged": True}]},
+            "contradictory merge status",
+            id="merged-flag-without-merge-time",
+        ),
+        pytest.param(
+            {"detail": _detail(merged_at=None)},
+            "contradictory merge status",
+            id="detail-merged-without-merge-time",
+        ),
+        pytest.param(
+            {"detail": _detail(merged_at="2026-11-11T08:00:00Z")},
+            "two different merge times",
+            id="listing-and-detail-merge-times-differ",
+        ),
+    ],
+)
+def test_missing_or_contradictory_merge_metadata_is_unknown_not_blocked(
+    project: Path, tmp_path: Path, change: dict[str, Any], message: str
+) -> None:
+    snapshot, _ = collected(project, approved_world(project, **change))
+    assert_omitted(project, tmp_path, snapshot, message)
+
+
+def test_explicitly_unmerged_pr_alongside_unknown_merge_status_is_not_a_definite_rejection(
+    project: Path, tmp_path: Path
+) -> None:
+    """One genuinely unmerged PR does not settle the question while another's status is unknown."""
+    unknown = pull(8, "feat/other-r1", merged_sha=sha("m8"))
+    del unknown["merged_at"]
+    snapshot, _ = collected(project, approved_world(project, associated=[pull(7, BRANCH), unknown]))
+    assert_omitted(project, tmp_path, snapshot, "pull request #8 has no merge status")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        pytest.param({"detail": _detail(number=999)}, id="pr-identity"),
+        pytest.param({"associated": _listed_without("merged_at")}, id="merge-metadata"),
+    ],
+)
+def test_cli_reports_malformed_records_with_exit_3(project: Path, tmp_path: Path, change: dict[str, Any]) -> None:
+    responses = approved_world(project, **change)
+    out, err = io.StringIO(), io.StringIO()
+    output = tmp_path / "s.json"
+    code = run(
+        ["evidence", "collect", str(project), "-o", str(output)], out=out, err=err, transport=FakeTransport(responses)
+    )
+    assert code == 3
+    assert f"incomplete: svc: approvals.{TASK}:" in err.getvalue()
+    assert entry(json.loads(output.read_text())) is None
+
+
+def test_cli_reports_missing_parent_records_with_exit_3(project: Path, tmp_path: Path) -> None:
+    responses = approved_world(project)
+    responses[f"{BASE}/commits/{MERGE}"] = {"parents": None, "sha": MERGE}
+    out, err = io.StringIO(), io.StringIO()
+    output = tmp_path / "s.json"
+    code = run(
+        ["evidence", "collect", str(project), "-o", str(output)], out=out, err=err, transport=FakeTransport(responses)
+    )
+    assert code == 3
+    assert entry(json.loads(output.read_text())) is None
+
+
 # -- API failures ---------------------------------------------------------------------------------
 
 
