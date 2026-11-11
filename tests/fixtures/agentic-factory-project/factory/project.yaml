@@ -1,0 +1,19 @@
+schemaVersion: factory.project/v1
+project:
+  id: agentic-factory
+  name: Factory Core describing its own repository
+approvers: [kaanf]
+planningRepository: factory
+repositories:
+  - id: factory
+    github: kaanf/agentic-factory
+    branches: {integration: dev, release: main, featurePrefix: feat/}
+    requiredChecks:
+      integration:
+        - {name: "Factory Core Check", workflowPath: .github/workflows/ci.yml}
+architecture:
+  adrDirectory: docs/adr
+  profiles:
+    - {id: factory-arch, repository: factory, path: factory/profiles/factory.yaml}
+dispatch:
+  enabled: false

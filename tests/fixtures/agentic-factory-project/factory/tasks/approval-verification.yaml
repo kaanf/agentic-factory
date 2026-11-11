@@ -1,0 +1,11 @@
+schemaVersion: factory.task/v1
+id: approval-verification
+revision: 1
+title: Derive approvals from merge records
+repository: factory
+kind: implementation
+specification: {path: specs/approval-verification.md, sha256: 19fbcf60ea60fe5fb16d1357a19891f4f7c2419b835bd09bbf951c5e99d73890}
+architecture: {profile: factory-arch, profileRevision: 1}
+dependsOn:
+  - {task: evidence-collector, gate: start, requires: validated}
+acceptance: [Approval is derived from a merge by an approver]

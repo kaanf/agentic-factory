@@ -1,0 +1,7 @@
+schemaVersion: factory.profile/v1
+id: factory-arch
+revision: 1
+repository: factory
+adrs: []
+enforcedBy:
+  - check: "Factory Core Check"

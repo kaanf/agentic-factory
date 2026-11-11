@@ -1,0 +1,9 @@
+schemaVersion: factory.task/v1
+id: evidence-collector
+revision: 1
+title: Read-only GitHub evidence collector
+repository: factory
+kind: implementation
+specification: {path: specs/evidence-collector.md, sha256: 5fc71dfd0f2c7728e08401972ca571729d6862d3d5b562972ad8dded1e22c1b9}
+architecture: {profile: factory-arch, profileRevision: 1}
+acceptance: [factory evidence collect produces a snapshot accepted by factory plan]

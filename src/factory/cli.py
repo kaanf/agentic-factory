@@ -1,8 +1,13 @@
-"""Command-line interface. Reads project files and an evidence snapshot; writes only to stdout/stderr.
+"""Command-line interface. Never writes to the project directory.
+
+``validate`` and ``plan`` read only local files. ``evidence collect`` additionally performs read-only
+GitHub API requests through the GitHub CLI and writes a snapshot to stdout or ``--output``.
 
 Exit codes:
-    0   success (validate: project is valid; plan: plan computed, whatever the task states)
+    0   success (validate: project is valid; plan: plan computed, whatever the task states;
+        evidence collect: every fact collected)
     2   invalid input (project or evidence snapshot failed validation)
+    3   evidence incomplete (snapshot written, but some facts could not be collected), or GitHub CLI unusable
     64  usage error
     70  internal error
 """
@@ -16,7 +21,9 @@ from pathlib import Path
 from typing import NoReturn, TextIO
 
 from factory import __version__
+from factory.collector import collect
 from factory.evidence import load_snapshot
+from factory.github import GhCliTransport, GitHubApi, GitHubError, Transport
 from factory.issues import Issue
 from factory.planning import evaluate
 from factory.render import plan_text, to_json, validation_document
@@ -24,6 +31,7 @@ from factory.validation import validate_project
 
 EXIT_OK = 0
 EXIT_INVALID = 2
+EXIT_INCOMPLETE = 3
 EXIT_USAGE = 64
 EXIT_INTERNAL = 70
 
@@ -47,6 +55,12 @@ def _parser() -> argparse.ArgumentParser:
     plan.add_argument("project", type=Path, help="project directory (planning repository root)")
     plan.add_argument("--evidence", type=Path, required=True, help="evidence snapshot JSON file")
     plan.add_argument("--format", choices=("text", "json"), default="text")
+
+    evidence = commands.add_parser("evidence", help="evidence snapshot commands")
+    evidence_commands = evidence.add_subparsers(dest="evidence_command", required=True, parser_class=_Parser)
+    collect_cmd = evidence_commands.add_parser("collect", help="collect a snapshot from GitHub (read-only)")
+    collect_cmd.add_argument("project", type=Path, help="project directory (planning repository root)")
+    collect_cmd.add_argument("--output", "-o", type=Path, help="write the snapshot here instead of stdout")
     return parser
 
 
@@ -110,7 +124,40 @@ def _plan(args: argparse.Namespace, out: TextIO, err: TextIO) -> int:
     return EXIT_OK
 
 
-def run(argv: Sequence[str] | None = None, out: TextIO | None = None, err: TextIO | None = None) -> int:
+def _collect(args: argparse.Namespace, out: TextIO, err: TextIO, transport: Transport | None) -> int:
+    result = validate_project(args.project)
+    project = result.project
+    if result.errors:
+        return _report_invalid(result.errors, result.warnings, "text", None, out, err)
+    assert project is not None
+    if args.output is not None and args.output.resolve().is_relative_to(project.root):
+        err.write("factory: error: --output must not be inside the project directory (it is read-only)\n")
+        return EXIT_USAGE
+    try:
+        api = GitHubApi(transport or GhCliTransport())
+    except GitHubError as exc:
+        err.write(f"error: {exc.message}\n")
+        return EXIT_INCOMPLETE
+    collection = collect(project, api)
+    document = to_json(collection.snapshot)
+    if args.output is None:
+        out.write(document)
+    else:
+        args.output.write_text(document, encoding="utf-8")
+    for error in collection.errors:
+        err.write(f"incomplete: {error.render()}\n")
+    if collection.errors:
+        err.write(f"{len(collection.errors)} fact(s) could not be collected; they will evaluate as UNKNOWN\n")
+        return EXIT_INCOMPLETE
+    return EXIT_OK
+
+
+def run(
+    argv: Sequence[str] | None = None,
+    out: TextIO | None = None,
+    err: TextIO | None = None,
+    transport: Transport | None = None,
+) -> int:
     out = out or sys.stdout
     err = err or sys.stderr
     try:
@@ -120,6 +167,8 @@ def run(argv: Sequence[str] | None = None, out: TextIO | None = None, err: TextI
     try:
         if args.command == "validate":
             return _validate(args, out, err)
+        if args.command == "evidence":
+            return _collect(args, out, err, transport)
         return _plan(args, out, err)
     except Exception as exc:  # noqa: BLE001 - last-resort guard; report and fail closed
         err.write(f"internal error: {type(exc).__name__}: {exc}\n")
