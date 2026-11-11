@@ -21,7 +21,9 @@ from github_support import (
     FakeTransport,
     Sequence,
     commit_entry,
+    comparison,
     contents,
+    git_commit,
     identity,
     listing,
     not_found,
@@ -33,11 +35,11 @@ from github_support import (
 )
 from support import THREE_REPO
 
-from factory.approvals import approval_paths
+from factory.approvals import approval_paths, collect_approvals
 from factory.cli import run
 from factory.collector import collect
 from factory.evidence import load_snapshot
-from factory.github import GitHubApi, Response
+from factory.github import GitHubApi, GitHubError, Response
 from factory.planning import evaluate
 from factory.project import load_project
 
@@ -118,7 +120,8 @@ def base_world(head: str = HEAD, user: Any = None) -> dict[str, Any]:
         page(f"{BASE}/pulls", head=f"example-org:{BRANCH}", state="all"): [],
         page(f"{BASE}/commits/{head}/pulls"): [],
         page(f"{BASE}/commits/{head}/check-runs", filter="all"): listing("check_runs", []),
-        q(f"{BASE}/compare/{head}...{head}"): {"status": "identical"},
+        q(f"{BASE}/compare/{head}...{head}"): comparison(head, head, "identical"),
+        f"{BASE}/git/commits/{head}": git_commit(head),
         "user": Response(401, {"message": "Requires authentication"}) if user is None else user,
     }
 
@@ -145,10 +148,11 @@ def artifact(
         if associated is None
         else associated,
         f"{BASE}/pulls/{number}": pull_detail(number, BRANCH, merged_sha=merge) if detail is None else detail,
-        q(f"{BASE}/compare/{merge}...{head}"): {"status": compare},
+        q(f"{BASE}/compare/{merge}...{head}"): comparison(merge, head, compare),
         q(f"{BASE}/contents/{path}", ref=merge): contents(text if merge_text is None else merge_text),
         f"{BASE}/commits/{merge}": commit_entry(merge, [PARENT]),
         q(f"{BASE}/contents/{path}", ref=PARENT): not_found() if parent_text is None else contents(parent_text),
+        f"{BASE}/git/commits/{PARENT}": git_commit(PARENT),
     }
 
 
@@ -829,6 +833,266 @@ def test_cli_reports_missing_parent_records_with_exit_3(project: Path, tmp_path:
     )
     assert code == 3
     assert entry(json.loads(output.read_text())) is None
+
+
+# -- a 404 proves absence only at a commit shown to exist -------------------------------------
+
+GHOST = sha("a commit that does not exist")
+OTHER = sha("some other commit")
+
+
+def cli_collect(project: Path, tmp_path: Path, responses: dict[str, Any]) -> tuple[int, str, dict[str, Any]]:
+    out, err = io.StringIO(), io.StringIO()
+    output = tmp_path / "cli.json"
+    code = run(
+        ["evidence", "collect", str(project), "-o", str(output)], out=out, err=err, transport=FakeTransport(responses)
+    )
+    return code, err.getvalue(), json.loads(output.read_text())
+
+
+def _ghost_parent(project: Path, lookup: Any = None) -> dict[str, Any]:
+    """The merge commit names a well-formed first parent that GitHub does not have."""
+    responses = approved_world(project, parent_text=text_of(project, TASK))
+    responses[f"{BASE}/commits/{MERGE}"] = commit_entry(MERGE, [GHOST])
+    responses[q(f"{BASE}/contents/{TASK}", ref=GHOST)] = not_found()
+    responses[f"{BASE}/git/commits/{GHOST}"] = not_found() if lookup is None else lookup
+    return responses
+
+
+DOES_NOT_EXIST = "does not exist or is not accessible"
+
+
+@pytest.mark.parametrize(
+    ("lookup", "message"),
+    [
+        pytest.param(None, f"commit {GHOST} {DOES_NOT_EXIST}", id="nonexistent"),
+        pytest.param(
+            Response(403, {"message": "Resource not accessible by integration"}), "HTTP 403", id="inaccessible"
+        ),
+        pytest.param(Response(500, {"message": "Server Error"}), "HTTP 500", id="server-error"),
+        pytest.param(GitHubError("gh api failed: connection reset"), "connection reset", id="transport-failure"),
+        pytest.param(git_commit(OTHER), "describes another commit", id="record-of-another-commit"),
+        pytest.param({"sha": GHOST}, "describes another commit", id="record-without-tree"),
+        pytest.param(git_commit(GHOST, tree="not-a-tree"), "describes another commit", id="record-tree-malformed"),
+        pytest.param([], "describes another commit", id="not-a-commit-record"),
+    ],
+)
+def test_contents_404_at_an_unconfirmed_first_parent_is_not_absence(
+    project: Path, tmp_path: Path, lookup: Any, message: str
+) -> None:
+    snapshot, transport = collected(project, _ghost_parent(project, lookup))
+    assert_omitted(project, tmp_path, snapshot, message)
+    assert f"{BASE}/git/commits/{GHOST}" in transport.requests
+
+
+def test_cli_reports_nonexistent_first_parent_with_exit_3(project: Path, tmp_path: Path) -> None:
+    code, err, snapshot = cli_collect(project, tmp_path, _ghost_parent(project))
+    assert code == 3
+    assert f"incomplete: svc: approvals.{TASK}: commit {GHOST} {DOES_NOT_EXIST}" in err
+    assert entry(snapshot) is None
+
+
+def test_existing_first_parent_without_the_file_is_confirmed_before_counting_as_absence(project: Path) -> None:
+    snapshot, transport = collected(project, approved_world(project))
+    assert (entry(snapshot)["approved"], entry(snapshot)["evidence"]) == (True, "MERGED_PULL_REQUEST")
+    # The profile is verified first; its 404 at PARENT triggers the lookup.
+    assert transport.requests.index(f"{BASE}/git/commits/{PARENT}") > transport.requests.index(
+        q(f"{BASE}/contents/{PROFILE}", ref=PARENT)
+    )
+    # The profile's merge has the same first parent: the commit is confirmed once per collection.
+    assert transport.requests.count(f"{BASE}/git/commits/{PARENT}") == 1
+
+
+def test_first_parent_already_holding_the_content_needs_no_existence_lookup(project: Path) -> None:
+    snapshot, transport = collected(project, approved_world(project, parent_text=text_of(project, TASK)))
+    assert entry(snapshot)["evidence"] == "CONTENT_PRESENT_BEFORE_MERGE"
+    assert snapshot["collection"]["complete"] is True
+
+
+def test_contents_404_at_an_unconfirmed_integration_head_is_not_absence(project: Path, tmp_path: Path) -> None:
+    responses = approved_world(project)
+    responses[q(f"{BASE}/contents/{TASK}", ref=HEAD)] = not_found()
+    responses[f"{BASE}/git/commits/{HEAD}"] = not_found()
+    snapshot, _ = collected(project, responses)
+    assert_omitted(project, tmp_path, snapshot, f"commit {HEAD} {DOES_NOT_EXIST}")
+
+
+def test_file_absent_at_a_confirmed_integration_head_is_still_blocked(project: Path, tmp_path: Path) -> None:
+    responses = approved_world(project)
+    responses[q(f"{BASE}/contents/{TASK}", ref=HEAD)] = not_found()
+    snapshot, transport = collected(project, responses)
+    assert (entry(snapshot)["approved"], entry(snapshot)["evidence"]) == (False, "NOT_ON_INTEGRATION_BRANCH")
+    assert f"{BASE}/git/commits/{HEAD}" in transport.requests
+    assert snapshot["collection"]["complete"] is True
+    assert planned(project, snapshot, tmp_path)["state"] == "BLOCKED"
+
+
+@pytest.mark.parametrize(
+    ("key", "value", "message"),
+    [
+        pytest.param(f"{BASE}/commits/{MERGE}", not_found(), "HTTP 404", id="merge-record-404"),
+        pytest.param(
+            f"{BASE}/commits/{MERGE}",
+            Response(403, {"message": "Resource not accessible by integration"}),
+            "HTTP 403",
+            id="merge-record-inaccessible",
+        ),
+        pytest.param(q(f"{BASE}/compare/{MERGE}...{HEAD}"), not_found(), "HTTP 404", id="compare-404"),
+    ],
+)
+def test_nonexistent_or_inaccessible_merge_commit_is_omitted(
+    project: Path, tmp_path: Path, key: str, value: Any, message: str
+) -> None:
+    responses = approved_world(project)
+    responses[key] = value
+    snapshot, _ = collected(project, responses)
+    assert_omitted(project, tmp_path, snapshot, message)
+
+
+def test_contents_404_at_an_unconfirmed_merge_commit_is_omitted(project: Path, tmp_path: Path) -> None:
+    responses = approved_world(project)
+    responses[q(f"{BASE}/contents/{TASK}", ref=MERGE)] = not_found()
+    responses[f"{BASE}/git/commits/{MERGE}"] = not_found()
+    snapshot, _ = collected(project, responses)
+    assert_omitted(project, tmp_path, snapshot, f"commit {MERGE} {DOES_NOT_EXIST}")
+
+
+# -- compare responses must describe exactly the requested commits ---------------------------
+
+
+def _compared(**fields: Any) -> dict[str, Any]:
+    return {**comparison(MERGE, HEAD, "ahead"), **fields}
+
+
+def _truncated() -> dict[str, Any]:
+    response = comparison(MERGE, HEAD, "ahead", ahead_by=300)
+    response["commits"] = response["commits"][:250]  # the API lists at most 250 without pagination
+    return response
+
+
+CONTRADICTORY = "is contradictory"
+
+
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        pytest.param(
+            {"status": "identical", "base_commit": {"sha": OTHER}}, "describes base", id="reported-counterexample"
+        ),
+        pytest.param(_compared(base_commit={"sha": OTHER}), "describes base", id="base-sha-conflicts"),
+        pytest.param(_compared(base_commit=None), "describes base", id="base-commit-missing"),
+        pytest.param(_compared(base_commit={"sha": MERGE + "\n"}), "describes base", id="base-sha-malformed"),
+        pytest.param(comparison(MERGE, HEAD, "identical"), CONTRADICTORY, id="identical-for-distinct-commits"),
+        pytest.param(_compared(commits=[{"sha": OTHER}]), "does not include the integration head", id="head-conflicts"),
+        pytest.param(_compared(merge_base_commit={"sha": OTHER}), CONTRADICTORY, id="ahead-merge-base-not-base"),
+        pytest.param(_compared(merge_base_commit=None), "malformed", id="merge-base-missing"),
+        pytest.param(_compared(behind_by=1), CONTRADICTORY, id="ahead-but-behind"),
+        pytest.param(_compared(ahead_by=0, total_commits=0, commits=[]), CONTRADICTORY, id="ahead-by-zero"),
+        pytest.param(_compared(total_commits=2), "malformed", id="total-disagrees-with-ahead-by"),
+        pytest.param(_compared(ahead_by=-1), "malformed", id="negative-count"),
+        pytest.param(_compared(total_commits=True), "malformed", id="boolean-total"),
+        pytest.param(_compared(behind_by=False), "malformed", id="boolean-count"),
+        pytest.param(_compared(ahead_by="1"), "malformed", id="string-count"),
+        pytest.param(_compared(commits=None), "malformed", id="commits-missing"),
+        pytest.param(_compared(commits=[HEAD]), "malformed", id="commit-entry-not-a-record"),
+        pytest.param(_compared(commits=[{"sha": HEAD + "\n"}]), "malformed", id="commit-entry-sha-malformed"),
+        pytest.param(_truncated(), "lists 250 of 300 commits", id="commits-truncated"),
+        pytest.param(_compared(status=None), "unexpected compare status", id="status-missing"),
+        pytest.param(_compared(status="unrelated"), "unexpected compare status", id="status-unknown"),
+        pytest.param(
+            {**comparison(MERGE, HEAD, "behind"), "merge_base_commit": {"sha": OTHER}},
+            CONTRADICTORY,
+            id="behind-merge-base-not-head",
+        ),
+        pytest.param(
+            {**comparison(MERGE, HEAD, "diverged"), "merge_base_commit": {"sha": MERGE}},
+            CONTRADICTORY,
+            id="diverged-merge-base-is-base",
+        ),
+        pytest.param(comparison(MERGE, HEAD, "behind"), "not reachable", id="coherent-behind"),
+        pytest.param(comparison(MERGE, HEAD, "diverged"), "not reachable", id="coherent-diverged"),
+        pytest.param([], "malformed", id="not-an-object"),
+    ],
+)
+def test_compare_response_must_describe_the_requested_commits(
+    project: Path, tmp_path: Path, response: Any, message: str
+) -> None:
+    responses = approved_world(project)
+    responses[q(f"{BASE}/compare/{MERGE}...{HEAD}")] = response
+    snapshot, _ = collected(project, responses)
+    assert_omitted(project, tmp_path, snapshot, message)
+
+
+def test_cli_reports_contradictory_compare_with_exit_3(project: Path, tmp_path: Path) -> None:
+    responses = approved_world(project)
+    responses[q(f"{BASE}/compare/{MERGE}...{HEAD}")] = {"status": "identical", "base_commit": {"sha": OTHER}}
+    code, err, snapshot = cli_collect(project, tmp_path, responses)
+    assert code == 3
+    assert f"incomplete: svc: approvals.{TASK}: comparison of {MERGE}...{HEAD}" in err
+    assert entry(snapshot) is None
+
+
+@pytest.mark.parametrize("ahead_by", [1, 3, 250])
+def test_coherent_ahead_comparison_is_reachable(project: Path, ahead_by: int) -> None:
+    responses = approved_world(project)
+    responses[q(f"{BASE}/compare/{MERGE}...{HEAD}")] = comparison(MERGE, HEAD, "ahead", ahead_by=ahead_by)
+    snapshot, _ = collected(project, responses)
+    assert (entry(snapshot)["approved"], entry(snapshot)["evidence"]) == (True, "MERGED_PULL_REQUEST")
+    assert snapshot["collection"]["complete"] is True
+
+
+def test_coherent_identical_comparison_when_the_merge_is_the_head(project: Path) -> None:
+    responses = base_world(head=MERGE)
+    responses.update(artifact(PROFILE, PROFILE_TEXT, head=MERGE, commit=PROFILE_COMMIT, number=6, merge=PROFILE_MERGE))
+    responses.update(artifact(TASK, text_of(project, TASK), head=MERGE, compare="identical"))
+    snapshot, transport = collected(project, responses)
+    assert q(f"{BASE}/compare/{MERGE}...{MERGE}") in transport.requests
+    assert (entry(snapshot)["approved"], entry(snapshot)["evidence"]) == (True, "MERGED_PULL_REQUEST")
+
+
+# -- base branches must be valid git branch names ---------------------------------------------
+
+MALFORMED_BRANCHES = [
+    " ", "\n", "dev\n", "\ndev", "dev\t", "de v", "dev\x00", "dev\x1f", "dev\x7f",
+    "dev..x", "..", "/dev", "dev/", "dev//x", ".dev", "dev/.x", "dev.", "x/y.", "dev.lock", "dev.lock/x",
+    "-dev", "HEAD", "@", "a~1", "a^", "a:b", "a?", "a*", "a[b", "a\\b", "a@{1}",
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("base", MALFORMED_BRANCHES)
+def test_malformed_base_branch_is_unknown_not_blocked(project: Path, tmp_path: Path, base: str) -> None:
+    snapshot, _ = collected(project, approved_world(project, associated=[pull(7, BRANCH, base=base, merged_sha=MERGE)]))
+    assert_omitted(project, tmp_path, snapshot, "no valid number or base branch")
+
+
+def test_cli_reports_malformed_base_branch_with_exit_3(project: Path, tmp_path: Path) -> None:
+    responses = approved_world(project, associated=[pull(7, BRANCH, base="dev\n", merged_sha=MERGE)])
+    code, err, snapshot = cli_collect(project, tmp_path, responses)
+    assert code == 3
+    assert f"incomplete: svc: approvals.{TASK}: an associated pull request has no valid" in err
+    assert entry(snapshot) is None
+
+
+@pytest.mark.parametrize("base", ["main", "release/2026.11", "feat/x_y-z", "user/a.b/c", "hotfix+1", "dev-old", "a@b"])
+def test_valid_other_base_branch_is_still_blocked(project: Path, tmp_path: Path, base: str) -> None:
+    snapshot, _ = collected(project, approved_world(project, associated=[pull(7, BRANCH, base=base, merged_sha=MERGE)]))
+    assert (entry(snapshot)["approved"], entry(snapshot)["evidence"]) == (False, "PR_NOT_INTO_INTEGRATION_BRANCH")
+    assert snapshot["collection"]["complete"] is True
+    assert planned(project, snapshot, tmp_path)["state"] == "BLOCKED"
+
+
+@pytest.mark.parametrize("branch", ["dev.", "-dev", "dev/.x", "HEAD"])
+def test_configured_integration_branch_must_be_a_valid_branch_name(project: Path, branch: str) -> None:
+    """The manifest schema admits these; they are not branch names git could have."""
+    manifest = project / "factory/project.yaml"
+    manifest.write_text(manifest.read_text().replace("integration: dev,", f"integration: {branch!r},"))
+    loaded = load_project(project).project
+    assert loaded is not None
+    transport = FakeTransport({})
+    entries, errors = collect_approvals(loaded, GitHubApi(transport))
+    assert entries == []
+    assert errors == [("approvals", f"configured integration branch {branch!r} is not a valid branch name")]
+    assert transport.requests == []
 
 
 # -- API failures ---------------------------------------------------------------------------------

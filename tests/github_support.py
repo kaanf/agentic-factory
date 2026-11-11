@@ -185,6 +185,32 @@ def commit_entry(sha: str, parents: list[str] | None = None) -> dict[str, Any]:
     return {"parents": [{"sha": p} for p in (parents or [])], "sha": sha}
 
 
+def git_commit(sha: str, tree: str = "e" * 40) -> dict[str, Any]:
+    """``GET git/commits/{sha}``: proves the commit exists."""
+    return {"parents": [], "sha": sha, "tree": {"sha": tree}}
+
+
+def comparison(base: str, head: str, status: str = "ahead", *, ahead_by: int | None = None) -> dict[str, Any]:
+    """``GET compare/{base}...{head}``: a response coherent with ``status``, as the REST API returns it."""
+    ahead, behind, merge_base = {
+        "identical": (0, 0, base),
+        "ahead": (1, 0, base),
+        "behind": (0, 1, head),
+        "diverged": (1, 1, "a" * 40),
+    }[status]
+    ahead = ahead if ahead_by is None else ahead_by
+    commits = [{"sha": "b" * 40}] * (ahead - 1) + [{"sha": head}] if ahead else []
+    return {
+        "ahead_by": ahead,
+        "base_commit": {"sha": base},
+        "behind_by": behind,
+        "commits": commits,
+        "merge_base_commit": {"sha": merge_base},
+        "status": status,
+        "total_commits": ahead,
+    }
+
+
 def pull_detail(
     number: int,
     branch: str,

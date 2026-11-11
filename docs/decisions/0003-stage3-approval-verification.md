@@ -24,6 +24,9 @@
 | A13 | `PR_NOT_MERGED` requires an explicit `merged_at: null` on a record with a valid state; absent, malformed or contradictory merge status omits the entry | Absence of evidence must yield UNKNOWN, not a definite BLOCKED (review finding, PR #3) |
 | A14 | The merge commit record must describe the merge commit and have a valid first parent; otherwise the entry is omitted. Every commit SHA from a response is matched as a whole string before use, because a 404 for a malformed ref would read as "absent" | Skipping the introduction check on malformed `parents` produced positive provenance (review finding, PR #3) |
 | A15 | Refusing `simulated` provenance is a requirement on future action-capable consumers, not on Stage 3 | The planner is advisory and dispatch is disabled; recorded as deferred in the architecture document |
+| A16 | A contents 404 counts as absence only at a commit confirmed by `GET git/commits/{sha}` (cached per collection); otherwise the entry is omitted | The contents API answers 404 for a nonexistent commit too, which made a nonexistent first parent look like "introduced by this PR" (review finding, PR #3) |
+| A17 | A compare response must name the requested base, have status, counts and merge base that agree, and list the head among its commits when ahead | An `identical` status for two different commits was accepted as reachability (review finding, PR #3) |
+| A18 | PR base branches and the configured integration branch must pass git's branch-name rules; malformed names omit the entry, valid other branches still BLOCK | Malformed names such as `"dev\n"` or `"/dev"` were read as a definite wrong base (review finding, PR #3) |
 
 ## Changes to existing behavior
 
@@ -38,6 +41,9 @@
   `simulated`, because the planner rightly refuses those approvals in a `github` snapshot.
 - The recorded GitHub fixture was re-recorded at `dev` = `62c1a3c` (PR #2 merge), so its expected
   facts moved from PR #1 to PR #2.
+- One real response was added to that fixture without re-recording the rest:
+  `GET git/commits/4f7b49d` (the first parent of `62c1a3c`), needed by A16. Mocked test worlds that
+  serve a contents 404 now also serve the commit record it requires.
 
 ## Live evidence (2026-11-11, `kaanf/agentic-factory`)
 

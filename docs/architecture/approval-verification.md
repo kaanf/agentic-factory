@@ -35,11 +35,11 @@ warning on stderr.
 Paths are project-relative; `planningDirectory` in the manifest locates the project inside the
 planning repository (default: the repository root).
 
-1. `GET contents/{path}?ref={integration head}`: 404 → `approved: false`, `NOT_ON_INTEGRATION_BRANCH`.
-   Otherwise the content's git blob SHA must equal the reported `sha`, and its SHA-256 is recorded.
+1. `GET contents/{path}?ref={integration head}`: 404 at a confirmed head commit (see "When a 404
+   proves absence") → `approved: false`, `NOT_ON_INTEGRATION_BRANCH`. Otherwise the content's git blob SHA must equal the reported `sha`, and its SHA-256 is recorded.
 2. `GET commits?path={path}&sha={head}&per_page=1`: the latest commit that changed the file.
-3. `GET commits/{commit}/pulls`: every record must have a positive integer `number` and a
-   non-empty base branch name, and its `base.repo.full_name` must be the planning repository; otherwise omitted. No PR →
+3. `GET commits/{commit}/pulls`: every record must have a positive integer `number` and a base
+   branch that is a valid git branch name (see "Branch names"), and its `base.repo.full_name` must be the planning repository; otherwise omitted. No PR →
    `NO_PULL_REQUEST` (direct push); no PR into the integration branch →
    `PR_NOT_INTO_INTEGRATION_BRANCH`; none merged → `PR_NOT_MERGED`; more than one merged into the
    integration branch → ambiguous, omitted. A PR counts as not merged only if its record has an
@@ -51,10 +51,12 @@ planning repository (default: the repository root).
    the integration branch, `merged: true`, with a valid merge status (as in step 3), a 40-hex merge
    commit and a `merged_by` login. Its merge time and merge commit must equal the listing's.
    Otherwise omitted.
-5. `GET compare/{merge}...{head}`: the merge commit must be reachable from the head; otherwise omitted.
+5. `GET compare/{merge}...{head}`: the response must describe exactly these two commits and show the
+   merge commit is the head or an ancestor of it (see "Compare responses"); otherwise omitted.
 6. `GET contents/{path}?ref={merge}`: must equal the head content; otherwise omitted.
 7. `GET commits/{merge}` and the file at its first parent: if the content was already there, the PR
-   did not introduce it → `CONTENT_PRESENT_BEFORE_MERGE`. The record must describe the merge commit
+   did not introduce it → `CONTENT_PRESENT_BEFORE_MERGE`. If it is not there, that counts only once
+   the parent commit is confirmed to exist. The record must describe the merge commit
    (`sha` equal to it), and `parents` must be a non-empty list whose first item has a 40-hex `sha`.
    Otherwise the introduction check cannot run, so the entry is omitted. It is never skipped.
 
@@ -93,9 +95,75 @@ parent) must be exactly 40 lowercase hex characters, with nothing before or afte
 in a request. A malformed ref would make the contents API answer 404, which this collector reads as
 "file absent"; validating first keeps a bad ref from turning into a finding.
 
+### When a 404 proves absence
+
+The contents API answers 404 both for a path missing from an existing commit and for a commit that
+does not exist (or that the token cannot see), and its body does not reliably tell them apart. So a
+contents 404 counts as "file absent at commit C" only when `GET git/commits/{C}` returns a record
+whose `sha` is C and whose `tree.sha` is a well-formed SHA. That is checked lazily, on the first 404
+for C, and cached for the rest of the collection; commit SHAs are immutable, so the cache cannot go
+stale, and the integration head is still re-read at the end. The same rule covers every contents
+lookup: integration head, merge commit and first parent.
+
+| `git/commits/{C}` | Result |
+|---|---|
+| Record for C with a valid tree | The 404 is absence: `NOT_ON_INTEGRATION_BRANCH` at the head, "differs" (omitted) at the merge, "introduced by this PR" at the first parent |
+| 404 | Commit does not exist or is not accessible → omitted |
+| Other HTTP error, transport failure | Omitted with that error (a rate limit stops collection) |
+| Record of another commit, missing or malformed tree, not an object | Omitted |
+
+The repository itself was resolved at the start of collection (renames and transfers are rejected).
+
+### Compare responses
+
+`compare/{merge}...{head}` is accepted only as a coherent statement about exactly those commits:
+
+- `base_commit.sha` must equal the requested merge commit.
+- `ahead_by`, `behind_by` are non-negative integers, `total_commits` equals `ahead_by`,
+  `merge_base_commit.sha` is a SHA, and `commits` is a list of records with SHAs.
+- The status must agree with the counts and the merge base, following git's semantics:
+
+  | Status | Must hold | Reachable? |
+  |---|---|---|
+  | `identical` | merge = head, both counts 0, merge base = merge | yes |
+  | `ahead` | merge ≠ head, `ahead_by` > 0, `behind_by` = 0, merge base = merge | yes |
+  | `behind` | merge ≠ head, `ahead_by` = 0, `behind_by` > 0, merge base = head | no (omitted) |
+  | `diverged` | both counts > 0, merge base is neither | no (omitted) |
+
+- When `ahead_by` > 0, `commits` must list all of them and include the head. The response has no
+  head field, so this is how its head is identified. Without pagination, GitHub lists at most 250
+  commits; a longer range therefore cannot be confirmed and the entry is omitted.
+
+Anything else, including an unknown status, is omitted. Reachability is never read from the status
+string alone.
+
+### Branch names
+
+PR base branches, and the configured integration branch, must be names `git check-ref-format
+--branch` accepts. No control characters, space, `~ ^ : ? * [ \`, `..` or `@{`; no empty, leading
+or trailing `/`; no component starting with `.` or ending in `.lock`; no trailing `.`; no leading
+`-`; not `HEAD` or `@`. A malformed base branch omits the entry (UNKNOWN). A valid branch other than
+the integration branch is still the definite `PR_NOT_INTO_INTEGRATION_BRANCH` (BLOCKED). The manifest
+schema admits some names git rejects (`dev.`, `-dev`, `dev/.x`, `HEAD`); with such an integration
+branch, approval collection records one error and collects nothing.
+
+### UNKNOWN versus BLOCKED
+
 Absence of evidence is not evidence of absence. `approved: false` (BLOCKED) is written only when the
 records conclusively show a negative fact. A record with a missing or malformed field that the
 judgment depends on is never read as that field's "false" value.
+
+## Remaining limitations
+
+- The first parent is confirmed to exist, but not to have been on the integration branch before the
+  merge. It comes from the merge commit's record, and the merge commit is confirmed reachable from
+  the head.
+- `git/commits/{C}` can also serve commits that live only in a fork of the repository (GitHub shares
+  objects across a fork network). Every commit this collector looks up comes from a record of the
+  planning repository itself, which limits but does not remove that ambiguity.
+- Comparisons over more than 250 commits are omitted rather than paginated.
+- Only 40-hex (SHA-1) object IDs are accepted.
+- The Stage 2 collector's own reachability and output-file checks are not held to these rules yet.
 
 ## Deferred: simulated evidence and action-capable consumers
 

@@ -29,6 +29,8 @@ from factory.model import Project, Repository
 
 UNVERIFIABLE = "unverifiable"
 _SHA = re.compile(r"[0-9a-f]{40}")
+# Characters and sequences git forbids anywhere in a ref name (git check-ref-format rules 3-5, 8-9).
+_REFNAME_FORBIDDEN = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]|\.\.|@\{|//")
 
 
 class _Unresolved(GitHubError):
@@ -42,6 +44,22 @@ def git_blob_sha(data: bytes) -> str:
 def _is_sha(value: Any) -> bool:
     # fullmatch: with match(), "$" also accepts a trailing newline.
     return isinstance(value, str) and _SHA.fullmatch(value) is not None
+
+
+def _is_branch(value: Any) -> bool:
+    """Whether ``value`` is a name git accepts for a branch (``git check-ref-format --branch``)."""
+    return (
+        isinstance(value, str)
+        and value not in ("", "@", "HEAD")
+        and _REFNAME_FORBIDDEN.search(value) is None
+        and not value.startswith(("/", "-"))
+        and not value.endswith(("/", ".", ".lock"))
+        and not any(part.startswith(".") or part.endswith(".lock") for part in value.split("/"))
+    )
+
+
+def _count(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _merged_at(pr: dict[str, Any], what: str) -> str | None:
@@ -97,6 +115,7 @@ class _ApprovalCollector:
         self.errors: list[tuple[str, str]] = []
         self.base = f"repos/{repo.github}"
         self.directory = project.manifest.planning_directory
+        self.commits: set[str] = set()  # SHAs whose commits GitHub has shown to exist
 
     def _error(self, fact: str, message: str) -> None:
         self.errors.append((fact, message))
@@ -110,12 +129,34 @@ class _ApprovalCollector:
             raise _Unresolved(f"refs/heads/{self.repo.integration_branch} has a malformed commit SHA {sha!r}")
         return sha
 
+    def _commit_exists(self, sha: str) -> None:
+        """Raise unless GitHub shows that commit ``sha`` exists in the repository."""
+        if sha in self.commits:
+            return
+        try:
+            record = self.api.get(f"{self.base}/git/commits/{segment(sha)}")
+        except GitHubError as exc:
+            if exc.status == 404:
+                raise _Unresolved(f"commit {sha} does not exist or is not accessible") from exc
+            raise
+        tree = record.get("tree") if isinstance(record, dict) else None
+        if (
+            not isinstance(record, dict)
+            or record.get("sha") != sha
+            or not isinstance(tree, dict)
+            or not _is_sha(tree.get("sha"))
+        ):
+            raise _Unresolved(f"the commit record requested for {sha} describes another commit")
+        self.commits.add(sha)
+
     def _file(self, path: str, ref: str) -> bytes | None:
-        """The file's bytes at ``ref``, or None if it does not exist there."""
+        """The file's bytes at commit ``ref``, or None if the commit exists and the file is not in it."""
         try:
             body = self.api.get(f"{self.base}/contents/{path_of(path)}", ref=ref)
         except GitHubError as exc:
             if exc.status == 404:
+                # The contents API answers 404 for a missing commit too: only an existing one proves absence.
+                self._commit_exists(ref)
                 return None
             raise
         if not isinstance(body, dict) or body.get("type") != "file" or body.get("encoding") != "base64":
@@ -134,7 +175,7 @@ class _ApprovalCollector:
             raise _Unresolved(f"{what} is not a pull request record")
         number, base = pr.get("number"), pr.get("base")
         valid_number = isinstance(number, int) and not isinstance(number, bool) and number > 0
-        if not valid_number or not isinstance(base, dict) or not isinstance(base.get("ref"), str) or not base["ref"]:
+        if not valid_number or not isinstance(base, dict) or not _is_branch(base.get("ref")):
             raise _Unresolved(f"{what} has no valid number or base branch")
         full_name = base["repo"].get("full_name") if isinstance(base.get("repo"), dict) else None
         if not isinstance(full_name, str) or full_name.lower() != self.repo.github.lower():
@@ -142,12 +183,51 @@ class _ApprovalCollector:
         return number, base["ref"]
 
     def _reachable(self, sha: str, head: str) -> bool:
-        status = self.api.get(f"{self.base}/compare/{segment(sha)}...{segment(head)}").get("status")
-        if status in ("ahead", "identical"):
-            return True
-        if status in ("behind", "diverged"):
-            return False
-        raise _Unresolved(f"unexpected compare status {status!r}")
+        """Whether ``sha`` is ``head`` or an ancestor of it, from a comparison of exactly those two commits."""
+        what = f"comparison of {sha}...{head}"
+        c = self.api.get(f"{self.base}/compare/{segment(sha)}...{segment(head)}")
+        if not isinstance(c, dict):
+            raise _Unresolved(f"{what} is malformed")
+        base_sha = c["base_commit"].get("sha") if isinstance(c.get("base_commit"), dict) else None
+        if base_sha != sha:
+            raise _Unresolved(f"{what} describes base {base_sha!r}")
+        status = c.get("status")
+        if status not in ("identical", "ahead", "behind", "diverged"):
+            raise _Unresolved(f"unexpected compare status {status!r}")
+        ahead, behind, commits = c.get("ahead_by"), c.get("behind_by"), c.get("commits")
+        merge_base = c["merge_base_commit"].get("sha") if isinstance(c.get("merge_base_commit"), dict) else None
+        listed = [x.get("sha") if isinstance(x, dict) else None for x in commits] if isinstance(commits, list) else None
+        if (
+            not _count(ahead)
+            or not _count(behind)
+            or not _count(c.get("total_commits"))
+            or c["total_commits"] != ahead
+            or not _is_sha(merge_base)
+            or listed is None
+            or not all(_is_sha(x) for x in listed)
+        ):
+            raise _Unresolved(f"{what} is malformed")
+        # Status, counts and merge base must tell one story (merge base = base exactly when head contains base).
+        coherent = {
+            "identical": sha == head and ahead == behind == 0 and merge_base == sha,
+            "ahead": sha != head and ahead > 0 and behind == 0 and merge_base == sha,
+            "behind": sha != head and ahead == 0 and behind > 0 and merge_base == head,
+            "diverged": ahead > 0 and behind > 0 and merge_base not in (sha, head),
+        }[status]
+        if not coherent:
+            raise _Unresolved(
+                f"{what} is contradictory (status {status!r}, ahead_by {ahead}, behind_by {behind}, "
+                f"merge base {merge_base})"
+            )
+        if ahead:
+            # The commits on the head side include the head itself, which identifies it.
+            if len(listed) != ahead:
+                raise _Unresolved(f"{what} lists {len(listed)} of {ahead} commits, so its head cannot be confirmed")
+            if head not in listed:
+                raise _Unresolved(f"{what} does not include the integration head")
+        elif listed:
+            raise _Unresolved(f"{what} is malformed")
+        return status in ("ahead", "identical")
 
     def _verify(self, path: str, head: str) -> dict[str, Any]:
         repo_path = f"{self.directory}/{path}" if self.directory else path
@@ -234,6 +314,12 @@ class _ApprovalCollector:
         return {**entry, "approved": True, "evidence": "MERGED_PULL_REQUEST"}
 
     def collect(self, paths: list[str]) -> list[dict[str, Any]]:
+        if not _is_branch(self.repo.integration_branch):
+            self._error(
+                "approvals",
+                f"configured integration branch {self.repo.integration_branch!r} is not a valid branch name",
+            )
+            return []
         try:
             identity = self.api.get(self.base)
             if str(identity.get("full_name", "")).lower() != self.repo.github.lower():

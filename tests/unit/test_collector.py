@@ -17,6 +17,7 @@ from github_support import (
     Sequence,
     check_run,
     contents,
+    git_commit,
     identity,
     job,
     listing,
@@ -128,6 +129,7 @@ def world(head: str = M, **commit: Any) -> dict[str, Any]:
         # Approval records (tests/unit/test_approvals.py covers them): neither file is on the integration head.
         q(f"{BASE}/contents/factory/profiles/svc.yaml", ref=head): not_found(),
         q(f"{BASE}/contents/factory/tasks/SVC-1.yaml", ref=head): not_found(),
+        f"{BASE}/git/commits/{head}": git_commit(head),  # a 404 proves absence only at an existing commit
         "user": Response(401, {"message": "Requires authentication"}),
     }
     responses.update(commit_responses(M, head=head, **commit))
@@ -395,6 +397,7 @@ def test_fork_pr_with_same_branch_name_is_ignored(project: Path, tmp_path: Path)
     ]
     responses = {k: v for k, v in responses.items() if f"/commits/{M}" not in k and f"/compare/{M}" not in k}
     responses.update(commit_responses(M, head=M))
+    responses[f"{BASE}/git/commits/{M}"] = git_commit(M)
     snapshot, task, _ = run_collection(project, responses, tmp_path)
     assert snapshot["repositories"]["svc"]["branches"][BRANCH]["pullRequests"] == []
     assert level(task, "merged") == ("FAIL", {"NOT_MERGED"})
@@ -452,6 +455,7 @@ def test_integration_head_moving_during_collection(project: Path, tmp_path: Path
     responses[f"{BASE}/git/ref/heads/dev"] = Sequence([ref(M), ref(H2)])
     for path in ("factory/profiles/svc.yaml", "factory/tasks/SVC-1.yaml"):
         responses[q(f"{BASE}/contents/{path}", ref=H2)] = not_found()
+    responses[f"{BASE}/git/commits/{H2}"] = git_commit(H2)
     snapshot, task, _ = run_collection(project, responses, tmp_path)
     facts = snapshot["repositories"]["svc"]
     assert "integrationHead" not in facts

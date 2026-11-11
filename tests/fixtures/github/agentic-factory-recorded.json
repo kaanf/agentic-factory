@@ -2217,6 +2217,49 @@
     },
     "status": 200
   },
+  "repos/kaanf/agentic-factory/git/commits/4f7b49d6b16b73f3de7c5a384f4ca05736046e6b": {
+    "body": {
+      "author": {
+        "date": "2026-11-11T07:22:51Z",
+        "email": "frtpkaan@gmail.com",
+        "name": "kaanf"
+      },
+      "committer": {
+        "date": "2026-11-11T07:22:51Z",
+        "email": "noreply@github.com",
+        "name": "GitHub"
+      },
+      "html_url": "https://github.com/kaanf/agentic-factory/commit/4f7b49d6b16b73f3de7c5a384f4ca05736046e6b",
+      "message": "Merge pull request #1 from kaanf/feat/factory-core-stage1\n\nfeat: Factory Core v0.1 offline validation and dependency planning",
+      "node_id": "C_kwDOVqSR9toAKDRmN2I0OWQ2YjE2YjczZjNkZTdjNWEzODRmNGNhMDU3MzYwNDZlNmI",
+      "parents": [
+        {
+          "html_url": "https://github.com/kaanf/agentic-factory/commit/28b9531ab3e1e7a41bf0dbf9ccec02a75db5e7d5",
+          "sha": "28b9531ab3e1e7a41bf0dbf9ccec02a75db5e7d5",
+          "url": "https://api.github.com/repos/kaanf/agentic-factory/git/commits/28b9531ab3e1e7a41bf0dbf9ccec02a75db5e7d5"
+        },
+        {
+          "html_url": "https://github.com/kaanf/agentic-factory/commit/bb63d2a29a51198df69df712cbde5762b8f5edb9",
+          "sha": "bb63d2a29a51198df69df712cbde5762b8f5edb9",
+          "url": "https://api.github.com/repos/kaanf/agentic-factory/git/commits/bb63d2a29a51198df69df712cbde5762b8f5edb9"
+        }
+      ],
+      "sha": "4f7b49d6b16b73f3de7c5a384f4ca05736046e6b",
+      "tree": {
+        "sha": "1ec55e1524f5cf46ad78fca7d695674e88fdbe95",
+        "url": "https://api.github.com/repos/kaanf/agentic-factory/git/trees/1ec55e1524f5cf46ad78fca7d695674e88fdbe95"
+      },
+      "url": "https://api.github.com/repos/kaanf/agentic-factory/git/commits/4f7b49d6b16b73f3de7c5a384f4ca05736046e6b",
+      "verification": {
+        "payload": "tree 1ec55e1524f5cf46ad78fca7d695674e88fdbe95\nparent 28b9531ab3e1e7a41bf0dbf9ccec02a75db5e7d5\nparent bb63d2a29a51198df69df712cbde5762b8f5edb9\nauthor kaanf <frtpkaan@gmail.com> 1794381771 +0100\ncommitter GitHub <noreply@github.com> 1794381771 +0100\n\nMerge pull request #1 from kaanf/feat/factory-core-stage1\n\nfeat: Factory Core v0.1 offline validation and dependency planning",
+        "reason": "valid",
+        "signature": "-----BEGIN PGP SIGNATURE-----\n\nwsFcBAABCAAQBQJq9BfLCRC1aQ7uu5UhlAAAzpoQAA51FBsg+Of/S5z5wRh+Lk7N\nqt6oSgaEdrS9Y9x/eR8x8DQroX2y8L5rCbGvB8kVpr5AJe85bA2pnJHSi+UKuxoL\nI5/p+izfuZeoztXqDe3yG9P0sME+nEKmkC64H+KpyAfFce1trEx90kYab4eY5PTZ\nv6prDdtBUj0a/4FNi/1mjJWgLYSdmaMVMx40Ir/yzf15c+DDRoXNYAU84HZeGnIb\nY++1NslrN4AG1Xn3rtvOE2DCMlik2IOXkTsCsHzemoIVbLdFdCsEmwfDbodJANfU\nOpZZx+m+bEC4DMK4ultR7/96MiALMf5YUi9sk2LFXNpgw/SKjiDhz6v6TXj/shGc\nkGhuFscW1gpho2HcBNBPDuPzawakQ0IlX9sCbv4mtPgFfaJjJxtNWcS9v9a4gjKr\n3m+t6aqC96nP0farh+J1LlnYoZAa8nqxACVPp04WdV75nV2bhsWCM32VbKVbMaHq\niGVu4PSFapdm5kkGnD9FeDgeHP5vDlOHXfE2FWP4RM+dKiT0Lhk8tL2rtabX3KEO\n6OQQWc3HuzYUEPU915EAMWKCv90xp36Mh/ZF1pKSRzH3/oN63pWbBXeZ5o+jo2QL\nhnGqxOuh4Hu2bkvoW9pRSj4qLrbN5ufQ61hxnTM2LFZvyZytYMFUEHpTRiYF05af\njIeJJ/0ohCGfUABMLJK3\n=yFUy\n-----END PGP SIGNATURE-----\n",
+        "verified": true,
+        "verified_at": "2026-11-11T07:22:51Z"
+      }
+    },
+    "status": 200
+  },
   "repos/kaanf/agentic-factory/git/ref/heads/dev": {
     "body": {
       "node_id": "REF_kwDOVqSR9q5yZWZzL2hlYWRzL2Rldg",
