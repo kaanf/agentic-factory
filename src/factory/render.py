@@ -109,3 +109,51 @@ def plan_text(plan: Plan) -> str:
             for reason in reasons:
                 lines.extend(_reason_lines(reason, 1))
     return "\n".join(lines) + "\n"
+
+
+def _finding_line(item: dict[str, str]) -> str:
+    ref = f" [{item['ref']}]" if item.get("ref") else ""
+    return f"  {item['result']:<9} {item['code']}{ref}: {item['message']}"
+
+
+def reconcile_text(document: dict[str, Any]) -> str:
+    lines = [
+        f"Reconcile (read-only): {document['project']} task {document['task']} revision {document['taskRevision']}",
+        f"State: {document['state']}",
+        f"Attempts: {document['attemptsUsed']} of {document['attemptCap']}",
+        f"Blocks dispatch: {'yes' if document['blocksDispatch'] else 'no'}",
+        f"Human action: {document['humanAction']}",
+    ]
+    for title, key in (("Findings", "findings"), ("History", "history")):
+        if document[key]:
+            lines.append(f"{title}:")
+            lines.extend(_finding_line(item) for item in document[key])
+    return "\n".join(lines) + "\n"
+
+
+def preflight_text(document: dict[str, Any]) -> str:
+    task = document["task"] or {}
+    dry_run = document["dryRun"]
+    lines = [
+        f"Preflight (dry run, nothing executed): {document['project']} task {task.get('id', '-')} "
+        f"revision {task.get('revision', '-')}",
+    ]
+    evidence = document["evidence"]
+    if evidence is not None:
+        authenticity = "authenticated" if evidence["authenticated"] else "NOT authenticated"
+        lines.append(f"Evidence: {evidence['provenance']} ({authenticity})")
+    lines.append(f"Dry run: {dry_run['result']}")
+    lines.extend(_finding_line(check) for check in dry_run["checks"])
+    authorization = document["authorization"]
+    lines.append(f"Authorization: {'GRANTED' if authorization['granted'] else 'NOT GRANTED'}")
+    lines.extend(_finding_line(reason) for reason in authorization["reasons"])
+    if document["reconciliation"] is not None:
+        lines.append(f"Reconciliation: {document['reconciliation']['state']}")
+    command = document["command"]
+    if command is None:
+        lines.append("Command: none (it could not be built safely)")
+    else:
+        lines.append("Command (display only; never executed by this version):")
+        lines.append(f"  {command['display']}")
+        lines.append(f"Command digest: {command['digest']}")
+    return "\n".join(lines) + "\n"

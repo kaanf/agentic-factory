@@ -50,6 +50,21 @@ class ProfileRef:
 
 
 @dataclass(frozen=True)
+class Dispatch:
+    """The manifest's dispatch section. Unset values are None: nothing is assumed for them."""
+
+    enabled: bool = False
+    archon_version: str | None = None
+    default_workflow: str | None = None
+    allowed_workflows: tuple[str, ...] = ()
+    forbidden_workflows: tuple[str, ...] = ()
+    default_provider: str | None = None
+    # Provider id -> Archon assistant name.
+    providers: dict[str, str] = field(default_factory=dict)
+    max_attempts: int = 2
+
+
+@dataclass(frozen=True)
 class Manifest:
     file: str
     project_id: str
@@ -61,6 +76,7 @@ class Manifest:
     dispatch_enabled: bool
     # Where the project directory sits inside the planning repository ("" for the repository root).
     planning_directory: str = ""
+    dispatch: Dispatch = field(default_factory=Dispatch)
 
     def repository(self, repo_id: str) -> Repository | None:
         return next((repo for repo in self.repositories if repo.id == repo_id), None)
@@ -101,6 +117,8 @@ class Task:
     consumes: tuple[Consumption, ...]
     depends_on: tuple[Edge, ...]
     acceptance: tuple[str, ...]
+    workflow: str | None = None
+    provider: str | None = None
 
     @property
     def requires_profile(self) -> bool:

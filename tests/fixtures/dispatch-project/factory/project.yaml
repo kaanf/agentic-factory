@@ -1,0 +1,27 @@
+schemaVersion: factory.project/v1
+project:
+  id: example-dispatch
+  name: Example project with a dispatch configuration (dry run only)
+approvers: [example-human]
+planningRepository: app
+repositories:
+  - id: app
+    github: example-org/example-app
+    branches: {integration: next, release: stable, featurePrefix: work/}
+    requiredChecks:
+      integration:
+        - {name: "App Check", workflowPath: .github/workflows/ci.yml}
+architecture:
+  adrDirectory: docs/decisions
+  profiles:
+    - {id: app-arch, repository: app, path: factory/profiles/app.yaml}
+dispatch:
+  enabled: false
+  archon: {validatedVersion: "0.14.0"}
+  workflows: {default: archon-implement, allowed: [archon-implement]}
+  providers:
+    default: claude
+    available:
+      claude: {archonAssistant: claude}
+      codex: {archonAssistant: codex}
+  maxAttemptsPerTaskRevision: 2

@@ -1,0 +1,11 @@
+schemaVersion: factory.task/v1
+id: APP-1
+revision: 3
+title: Export items as CSV
+repository: app
+kind: implementation
+specification: {path: specs/export.md, sha256: 0c1fca16c1380e3c8c1dc50b0529d8beba98ebc709140668742a0856ed3add52}
+architecture: {profile: app-arch, profileRevision: 1}
+acceptance:
+  - The export contains one row per item
+  - Quotes in item names are escaped

@@ -34,6 +34,11 @@ jobs:
           uv python install 3.12
           uv sync --locked --python 3.12
 
+      - name: Lint and format check (Ruff, pinned in uv.lock)
+        run: |
+          .venv/bin/ruff check .
+          .venv/bin/ruff format --check .
+
       - name: Clean installation test (wheel into an empty environment)
         run: |
           uv build
@@ -55,6 +60,7 @@ jobs:
           .venv/bin/factory validate tests/fixtures/three-repo-project
           .venv/bin/factory validate tests/fixtures/single-repo-project
           .venv/bin/factory validate tests/fixtures/agentic-factory-project
+          .venv/bin/factory validate tests/fixtures/dispatch-project
           for snapshot in three-repo-baseline three-repo-merged-without-push-ci; do
             .venv/bin/factory plan tests/fixtures/three-repo-project \
               --evidence "tests/fixtures/evidence/$snapshot.json" --format json > /dev/null

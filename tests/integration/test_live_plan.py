@@ -865,7 +865,8 @@ def test_plan_output_has_no_authorization_or_dispatch_switch(project: Path) -> N
 def test_no_command_can_dispatch_or_act() -> None:
     parser = cli_module._parser()
     commands = next(a for a in parser._actions if a.dest == "command")
-    assert set(commands.choices) == {"validate", "plan", "evidence"}  # type: ignore[union-attr]
+    # Stage 5 adds two read-only commands; neither can execute (tests/integration/test_preflight.py).
+    assert set(commands.choices) == {"validate", "plan", "evidence", "preflight", "reconcile"}  # type: ignore[union-attr]
     source = Path(cli_module.__file__).parent
     for module in sorted(source.glob("*.py")):
         text = module.read_text()

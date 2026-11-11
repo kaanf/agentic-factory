@@ -26,11 +26,9 @@ from typing import Any
 
 from factory.github import GitHubApi, GitHubError, path_of, segment
 from factory.model import Project, Repository
+from factory.refs import is_branch, is_sha
 
 UNVERIFIABLE = "unverifiable"
-_SHA = re.compile(r"[0-9a-f]{40}")
-# Characters and sequences git forbids anywhere in a ref name (git check-ref-format rules 3-5, 8-9).
-_REFNAME_FORBIDDEN = re.compile(r"[\x00-\x20\x7f~^:?*\[\\]|\.\.|@\{|//")
 
 
 class _Unresolved(GitHubError):
@@ -39,23 +37,6 @@ class _Unresolved(GitHubError):
 
 def git_blob_sha(data: bytes) -> str:
     return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
-
-
-def _is_sha(value: Any) -> bool:
-    # fullmatch: with match(), "$" also accepts a trailing newline.
-    return isinstance(value, str) and _SHA.fullmatch(value) is not None
-
-
-def _is_branch(value: Any) -> bool:
-    """Whether ``value`` is a name git accepts for a branch (``git check-ref-format --branch``)."""
-    return (
-        isinstance(value, str)
-        and value not in ("", "@", "HEAD")
-        and _REFNAME_FORBIDDEN.search(value) is None
-        and not value.startswith(("/", "-"))
-        and not value.endswith(("/", ".", ".lock"))
-        and not any(part.startswith(".") or part.endswith(".lock") for part in value.split("/"))
-    )
 
 
 def _count(value: Any) -> bool:
@@ -125,7 +106,7 @@ class _ApprovalCollector:
         if ref["object"]["type"] != "commit":
             raise GitHubError(f"refs/heads/{self.repo.integration_branch} does not point to a commit")
         sha: str = ref["object"]["sha"]
-        if not _is_sha(sha):
+        if not is_sha(sha):
             raise _Unresolved(f"refs/heads/{self.repo.integration_branch} has a malformed commit SHA {sha!r}")
         return sha
 
@@ -144,7 +125,7 @@ class _ApprovalCollector:
             not isinstance(record, dict)
             or record.get("sha") != sha
             or not isinstance(tree, dict)
-            or not _is_sha(tree.get("sha"))
+            or not is_sha(tree.get("sha"))
         ):
             raise _Unresolved(f"the commit record requested for {sha} describes another commit")
         self.commits.add(sha)
@@ -175,7 +156,7 @@ class _ApprovalCollector:
             raise _Unresolved(f"{what} is not a pull request record")
         number, base = pr.get("number"), pr.get("base")
         valid_number = isinstance(number, int) and not isinstance(number, bool) and number > 0
-        if not valid_number or not isinstance(base, dict) or not _is_branch(base.get("ref")):
+        if not valid_number or not isinstance(base, dict) or not is_branch(base.get("ref")):
             raise _Unresolved(f"{what} has no valid number or base branch")
         full_name = base["repo"].get("full_name") if isinstance(base.get("repo"), dict) else None
         if not isinstance(full_name, str) or full_name.lower() != self.repo.github.lower():
@@ -243,9 +224,9 @@ class _ApprovalCollector:
             or not _count(behind)
             or not _count(c.get("total_commits"))
             or c["total_commits"] != ahead
-            or not _is_sha(merge_base)
+            or not is_sha(merge_base)
             or listed is None
-            or not all(_is_sha(x) for x in listed)
+            or not all(is_sha(x) for x in listed)
         ):
             raise _Unresolved(f"{what} is malformed")
         # Status, counts and merge base must tell one story (merge base = base exactly when head contains base).
@@ -288,7 +269,7 @@ class _ApprovalCollector:
         if not isinstance(latest, list) or len(latest) != 1:
             raise _Unresolved(f"no commit on {self.repo.integration_branch} is recorded as changing {repo_path}")
         commit: str = latest[0]["sha"]
-        if not _is_sha(commit):
+        if not is_sha(commit):
             raise _Unresolved(f"the latest commit recorded for {repo_path} has a malformed SHA {commit!r}")
         entry: dict[str, Any] = {
             "approved": False,
@@ -326,7 +307,7 @@ class _ApprovalCollector:
             raise _Unresolved(f"{what} reports two different merge times")
         merge_sha = pr.get("merge_commit_sha")
         merged_by = pr["merged_by"].get("login") if isinstance(pr.get("merged_by"), dict) else None
-        if not _is_sha(merge_sha) or not isinstance(merged_by, str) or not merged_by:
+        if not is_sha(merge_sha) or not isinstance(merged_by, str) or not merged_by:
             raise _Unresolved(f"{what} has no recorded merge commit or merge actor")
         if listed.get("merge_commit_sha") != merge_sha:
             raise _Unresolved(f"{what} reports two different merge commits")
@@ -345,7 +326,7 @@ class _ApprovalCollector:
             not isinstance(parents, list)
             or not parents
             or not isinstance(parents[0], dict)
-            or not _is_sha(parents[0].get("sha"))
+            or not is_sha(parents[0].get("sha"))
         ):
             # Without the first parent nothing shows that this PR introduced the content.
             raise _Unresolved(f"merge commit {merge_sha} of #{number} has no valid first parent")
@@ -356,7 +337,7 @@ class _ApprovalCollector:
         return {**entry, "approved": True, "evidence": "MERGED_PULL_REQUEST"}
 
     def collect(self, paths: list[str]) -> list[dict[str, Any]]:
-        if not _is_branch(self.repo.integration_branch):
+        if not is_branch(self.repo.integration_branch):
             self._error(
                 "approvals",
                 f"configured integration branch {self.repo.integration_branch!r} is not a valid branch name",

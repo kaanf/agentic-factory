@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory.run-outcome/v1",
+  "title": "Factory dispatch outcome record v1",
+  "description": "Published by a future dispatch (Stage 6) or by an explicit human reconcile decision as attempt-N.outcome.json, written to a temporary file, fsynced and renamed. Stage 5 only reads it. 'exited': the Archon process ended with exitCode. 'adopted': a human accepted the branch as this attempt's result. 'abandoned': a human gave the attempt up; it still counts.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "project", "task", "revision", "attempt", "status", "exitCode", "finishedAt"],
+  "properties": {
+    "schemaVersion": {"const": "factory.run-outcome/v1"},
+    "project": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 64},
+    "task": {"type": "string", "maxLength": 80, "pattern": "^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$"},
+    "revision": {"type": "integer", "minimum": 1},
+    "attempt": {"type": "integer", "minimum": 1},
+    "status": {"enum": ["exited", "adopted", "abandoned"]},
+    "exitCode": {"type": ["integer", "null"]},
+    "finishedAt": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"},
+    "archonRunId": {"type": ["string", "null"], "maxLength": 200, "pattern": "^[A-Za-z0-9._-]+$"}
+  },
+  "if": {"properties": {"status": {"const": "exited"}}, "required": ["status"]},
+  "then": {"properties": {"exitCode": {"type": "integer"}}}
+}
