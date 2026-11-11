@@ -1,0 +1,8 @@
+schemaVersion: factory.profile/v1
+id: tool-arch
+revision: 2
+repository: tool
+adrs:
+  - {id: DEC-1, revision: 1}
+enforcedBy:
+  - check: "import-linter"

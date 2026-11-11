@@ -1,0 +1,18 @@
+schemaVersion: factory.task/v1
+id: CLIENT-INT-004
+revision: 1
+title: Stock list integration with the real service
+repository: client
+kind: implementation
+specification: {path: specs/stock-integration.md, sha256: 4aaad85118cc58c8ab15660e27aae4081f2eb25953c522931edcd472064bc2d4}
+architecture: {profile: client-arch, profileRevision: 1}
+consumes:
+  - {output: svc-contract, version: "^1.2.0"}
+dependsOn:
+  - {task: SVC-CONTRACT-002, gate: start, requires: integration-ready}
+  - {task: CLIENT-UI-003, gate: start, requires: merged}
+  - {task: SVC-IMPL-007, gate: merge, requires: integration-ready}
+  - {task: SVC-IMPL-007, gate: complete, requires: environment-verified}
+acceptance:
+  - Stock list calls GET /items on the real service
+  - Network errors show a retry state

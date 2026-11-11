@@ -1,0 +1,9 @@
+schemaVersion: factory.task/v1
+id: PLAN-SPIKE-001
+revision: 1
+title: Compare storage options
+repository: plan
+kind: spike
+specification: {path: specs/spike-storage.md, sha256: a805dd2ed0e7da65473dfa565053963da3cdc69d3792608119a08180d2aef010}
+acceptance:
+  - Options document lists at least two options with sources

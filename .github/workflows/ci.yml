@@ -1,0 +1,74 @@
+name: CI
+
+# Trusted triggers only: pull requests run with a read-only token and no secrets.
+# Push CI on the integration and release branches gives every integrated commit its own checks.
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Factory Core Check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: false
+
+      - name: Install Python 3.12 and locked dependencies
+        run: |
+          uv python install 3.12
+          uv sync --locked --python 3.12
+
+      - name: Clean installation test (wheel into an empty environment)
+        run: |
+          uv build
+          uv venv --python 3.12 "$RUNNER_TEMP/clean"
+          uv pip install --python "$RUNNER_TEMP/clean/bin/python" dist/*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/clean/bin/factory" --version
+          "$RUNNER_TEMP/clean/bin/factory" validate "$GITHUB_WORKSPACE/tests/fixtures/single-repo-project"
+
+      - name: Validate schemas and fixtures
+        run: |
+          .venv/bin/python -c "
+          from jsonschema import Draft202012Validator
+          from factory.schemas.validation import SCHEMA_FILES, load_schema
+          for kind in sorted(SCHEMA_FILES):
+              Draft202012Validator.check_schema(load_schema(kind))
+              print('schema ok:', SCHEMA_FILES[kind])
+          "
+          .venv/bin/factory validate tests/fixtures/three-repo-project
+          .venv/bin/factory validate tests/fixtures/single-repo-project
+          for snapshot in three-repo-baseline three-repo-merged-without-push-ci; do
+            .venv/bin/factory plan tests/fixtures/three-repo-project \
+              --evidence "tests/fixtures/evidence/$snapshot.json" --format json > /dev/null
+          done
+          .venv/bin/factory plan tests/fixtures/single-repo-project \
+            --evidence tests/fixtures/evidence/single-repo-baseline.json
+
+      # The remaining steps run in a fresh network namespace with no interfaces up,
+      # so any network access fails at the operating-system level (T16).
+      - name: Offline acceptance suite (T1-T16, network disabled)
+        run: |
+          sudo unshare --net -- sudo -u "$USER" env "PATH=$PATH" "HOME=$HOME" \
+            .venv/bin/pytest -p no:cacheprovider -v tests/acceptance
+
+      - name: Full test suite (network disabled)
+        run: |
+          sudo unshare --net -- sudo -u "$USER" env "PATH=$PATH" "HOME=$HOME" \
+            .venv/bin/pytest -p no:cacheprovider -q --ignore=tests/acceptance

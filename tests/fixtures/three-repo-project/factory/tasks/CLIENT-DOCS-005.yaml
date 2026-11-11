@@ -1,0 +1,12 @@
+schemaVersion: factory.task/v1
+id: CLIENT-DOCS-005
+revision: 1
+title: Help text for the stock list
+repository: client
+kind: chore
+specification: {path: specs/stock-help.md, sha256: 0f65c5ec55d3dd00b18b19e23ac219e102730db23155f1d2fabb7516f804b7ba}
+architecture: {profile: client-arch, profileRevision: 1}
+dependsOn:
+  - {task: SVC-IMPL-007, gate: start, requires: validated}
+acceptance:
+  - Help text describes quantity and unit

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory.adr/v1",
+  "title": "ADR front matter v1",
+  "description": "YAML front matter of an Architecture Decision Record. Factory Core validates structure and links; it does not judge content. Status is not approval: approval is derived from evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "title", "status", "revision"],
+  "properties": {
+    "schemaVersion": {"const": "factory.adr/v1"},
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$"},
+    "title": {"type": "string", "minLength": 1},
+    "status": {"enum": ["proposed", "accepted", "superseded", "rejected"]},
+    "revision": {"type": "integer", "minimum": 1},
+    "supersedes": {
+      "anyOf": [
+        {"type": "null"},
+        {"type": "string", "pattern": "^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$"}
+      ]
+    },
+    "research": {
+      "description": "Project-relative paths to research and option-evaluation documents.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/relativePath"}
+    },
+    "critique": {
+      "description": "Project-relative paths to independent critique documents.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/relativePath"}
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1}
+        }
+      }
+    }
+  },
+  "if": {
+    "properties": {"status": {"enum": ["proposed", "accepted"]}},
+    "required": ["status"]
+  },
+  "then": {
+    "required": ["research", "critique"],
+    "properties": {
+      "research": {"minItems": 1},
+      "critique": {"minItems": 1}
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![/\\\\])(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\x00]+$"
+    }
+  }
+}

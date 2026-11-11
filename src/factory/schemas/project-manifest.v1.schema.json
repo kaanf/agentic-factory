@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory.project/v1",
+  "title": "Factory project manifest v1",
+  "description": "Describes one project: its repositories, branch conventions, required checks, declared outputs and architecture profiles. Everything project-specific lives here, never in Factory Core source.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "project", "approvers", "planningRepository", "repositories", "architecture", "dispatch"],
+  "properties": {
+    "schemaVersion": {"const": "factory.project/v1"},
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": {"$ref": "#/$defs/slug"},
+        "name": {"type": "string", "minLength": 1}
+      }
+    },
+    "approvers": {
+      "description": "GitHub logins whose merges count as human approval once approval evidence is collected from GitHub. Listing a login here grants nothing by itself.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$"}
+    },
+    "planningRepository": {
+      "description": "Repository id that holds this manifest, the task files, profiles and ADRs.",
+      "$ref": "#/$defs/slug"
+    },
+    "repositories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/repository"}
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adrDirectory", "profiles"],
+      "properties": {
+        "adrDirectory": {"$ref": "#/$defs/relativePath"},
+        "profiles": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "repository", "path"],
+            "properties": {
+              "id": {"$ref": "#/$defs/slug"},
+              "repository": {"$ref": "#/$defs/slug"},
+              "path": {"$ref": "#/$defs/relativePath"}
+            }
+          }
+        }
+      }
+    },
+    "dispatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "description": "Global switch for agent dispatch. Defaults to false. This Factory Core version has no dispatch capability and rejects true.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 64},
+    "relativePath": {
+      "description": "POSIX path relative to the project directory. Absolute paths and '..' segments are rejected.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![/\\\\])(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\x00]+$"
+    },
+    "branchName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._/-]+(?<!/)(?<!\\.lock)$"
+    },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "github", "branches", "requiredChecks"],
+      "properties": {
+        "id": {"$ref": "#/$defs/slug"},
+        "github": {
+          "description": "GitHub repository as owner/name.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$"
+        },
+        "branches": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["integration", "release", "featurePrefix"],
+          "properties": {
+            "integration": {"$ref": "#/$defs/branchName"},
+            "release": {"$ref": "#/$defs/branchName"},
+            "featurePrefix": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100,
+              "pattern": "^(?!/)(?!.*\\.\\.)(?!.*//)[A-Za-z0-9._/-]+$"
+            }
+          }
+        },
+        "requiredChecks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["integration"],
+          "properties": {
+            "integration": {
+              "description": "Checks that must succeed on push CI for an exact integration-branch commit before it counts as validated.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["name", "workflowPath"],
+                "properties": {
+                  "name": {"type": "string", "minLength": 1, "maxLength": 200},
+                  "workflowPath": {"$ref": "#/$defs/relativePath"},
+                  "app": {
+                    "description": "Slug of the GitHub App that must have reported the check.",
+                    "type": "string",
+                    "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                    "default": "github-actions"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "outputs": {
+          "description": "Files this repository publishes for other repositories, such as an API contract.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "path", "versionPointer"],
+            "properties": {
+              "id": {"$ref": "#/$defs/slug"},
+              "path": {"$ref": "#/$defs/relativePath"},
+              "versionPointer": {
+                "description": "JSON Pointer to the version field inside the output file.",
+                "type": "string",
+                "pattern": "^(?:/(?:[^~/]|~[01])*)+$"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+schemaVersion: factory.task/v1
+id: CLIENT-UI-003
+revision: 1
+title: Stock list screen with a fake repository
+repository: client
+kind: implementation
+specification: {path: specs/stock-ui.md, sha256: 3b6a27303ffe4ba485e7ee4dd236d45a882332bbd2b52f1493e832cf90513a77}
+architecture: {profile: client-arch, profileRevision: 1}
+consumes:
+  - {output: svc-contract, version: "^1.2.0"}
+dependsOn:
+  - {task: SVC-CONTRACT-002, gate: start, requires: integration-ready}
+acceptance:
+  - Stock list renders quantity and unit from the fake repository

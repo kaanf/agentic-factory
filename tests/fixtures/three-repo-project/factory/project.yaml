@@ -1,0 +1,34 @@
+schemaVersion: factory.project/v1
+project:
+  id: example-three
+  name: Example three-repository project
+approvers: [example-human]
+planningRepository: plan
+repositories:
+  - id: plan
+    github: example-org/example-plan
+    branches: {integration: dev, release: main, featurePrefix: feat/}
+    requiredChecks:
+      integration:
+        - {name: "Plan Check", workflowPath: .github/workflows/ci.yml}
+  - id: svc
+    github: example-org/example-svc
+    branches: {integration: dev, release: main, featurePrefix: feat/}
+    requiredChecks:
+      integration:
+        - {name: "Svc Check", workflowPath: .github/workflows/ci.yml}
+    outputs:
+      - {id: svc-contract, path: api/openapi.yaml, versionPointer: /info/version}
+  - id: client
+    github: example-org/example-client
+    branches: {integration: dev, release: main, featurePrefix: feat/}
+    requiredChecks:
+      integration:
+        - {name: "Client Check", workflowPath: .github/workflows/ci.yml}
+architecture:
+  adrDirectory: docs/adr
+  profiles:
+    - {id: svc-arch, repository: svc, path: factory/profiles/svc.yaml}
+    - {id: client-arch, repository: client, path: factory/profiles/client.yaml}
+dispatch:
+  enabled: false

@@ -1,0 +1,227 @@
+{
+  "approvals": [
+    {
+      "approved": true,
+      "mergedBy": "example-human",
+      "path": "docs/adr/ADR-0001-contract-source.md",
+      "pullRequest": 1,
+      "sha256": "fdb1a0f3f4f49fc7202663e4c1322267b6a397f229eaccafe9920d89bbde4e65"
+    },
+    {
+      "approved": true,
+      "mergedBy": "example-human",
+      "path": "docs/adr/ADR-0002-module-layering.md",
+      "pullRequest": 1,
+      "sha256": "c9d4fe57eaf7dc52bfc27d25d4ca4fc2dfc7c54fba9a58c2e41d35d3c531c0e1"
+    },
+    {
+      "approved": true,
+      "mergedBy": "example-human",
+      "path": "factory/profiles/client.yaml",
+      "pullRequest": 1,
+      "sha256": "edb5e09440545141ad4b92e1222ffb01c82f71e11eab192b0dec2272017e7038"
+    },
+    {
+      "approved": true,
+      "mergedBy": "example-human",
+      "path": "factory/profiles/svc.yaml",
+      "pullRequest": 1,
+      "sha256": "5941fe53b9097c19bc722f99209f25430ec690fc13b3becf86bb8ec83590e2f0"
+    },
+    {
+      "approved": true,
+      "mergedBy": "example-human",
+      "path": "factory/tasks/CLIENT-DOCS-005.yaml",
+      "pullRequest": 1,
+      "sha256": "e815d9abe4a81c22e792ad175bb12d7d6c80eee1e3e1aad99bd236f7d72b4bd1"
+    },
+    {
+      "approved": true,
+      "mergedBy": "example-human",
+      "path": "factory/tasks/CLIENT-INT-004.yaml",
+      "pullRequest": 1,
+      "sha256": "73dcaac4e1634e91abde496eb01129474dd33f8f0dc2eb5dd5cfcd89be1e60aa"
+    },
+    {
+      "approved": true,
+      "mergedBy": "example-human",
+      "path": "factory/tasks/CLIENT-UI-003.yaml",
+      "pullRequest": 1,
+      "sha256": "90ada6aba110fae67542e4cedcac251f485cacdc037a8ff5bb53949e13c54840"
+    },
+    {
+      "approved": true,
+      "mergedBy": "example-human",
+      "path": "factory/tasks/PLAN-SPIKE-001.yaml",
+      "pullRequest": 1,
+      "sha256": "0ff5b54b0cf7546e681ca2647866ce0c711ecdd8a2379dcaf56bff8b68874d7d"
+    },
+    {
+      "approved": true,
+      "mergedBy": "example-human",
+      "path": "factory/tasks/SVC-CONTRACT-002.yaml",
+      "pullRequest": 1,
+      "sha256": "c0088baf896436a8a94cce6afd13cfaa85c1060563ae200f1cd5eb80c7a898ff"
+    },
+    {
+      "approved": true,
+      "mergedBy": "example-human",
+      "path": "factory/tasks/SVC-IMPL-007.yaml",
+      "pullRequest": 1,
+      "sha256": "65ff45dd2c2f6a5b4b85aa3577d073c4a4798a12bf886be8834315d24bd1db4e"
+    }
+  ],
+  "observedAt": "2026-11-11T12:00:00Z",
+  "project": "example-three",
+  "provenance": {
+    "kind": "simulated",
+    "note": "test fixture; approvals are not authenticated"
+  },
+  "repositories": {
+    "client": {
+      "branches": {
+        "feat/CLIENT-DOCS-005-r1": {
+          "pullRequests": []
+        },
+        "feat/CLIENT-INT-004-r1": {
+          "pullRequests": []
+        },
+        "feat/CLIENT-UI-003-r1": {
+          "pullRequests": [
+            {
+              "baseBranch": "dev",
+              "mergeCommitSha": null,
+              "number": 21,
+              "state": "open"
+            }
+          ]
+        }
+      },
+      "commits": {
+        "51bbf92869502a214bbb324c37bfd7e2bb1b2426": {
+          "checkRuns": [
+            {
+              "app": "github-actions",
+              "attempt": 1,
+              "conclusion": "success",
+              "event": "push",
+              "headBranch": "dev",
+              "name": "Client Check",
+              "status": "completed",
+              "workflowPath": ".github/workflows/ci.yml"
+            }
+          ],
+          "mergedPullRequests": [
+            1
+          ],
+          "reachableFromIntegrationHead": true
+        }
+      },
+      "integrationHead": "51bbf92869502a214bbb324c37bfd7e2bb1b2426"
+    },
+    "plan": {
+      "branches": {
+        "feat/PLAN-SPIKE-001-r1": {
+          "pullRequests": []
+        }
+      },
+      "commits": {
+        "4ad350e31c4bd040b6f637b39425b498fa2ca3c6": {
+          "checkRuns": [
+            {
+              "app": "github-actions",
+              "attempt": 1,
+              "conclusion": "success",
+              "event": "push",
+              "headBranch": "dev",
+              "name": "Plan Check",
+              "status": "completed",
+              "workflowPath": ".github/workflows/ci.yml"
+            }
+          ],
+          "mergedPullRequests": [
+            5
+          ],
+          "reachableFromIntegrationHead": true
+        }
+      },
+      "integrationHead": "4ad350e31c4bd040b6f637b39425b498fa2ca3c6"
+    },
+    "svc": {
+      "branches": {
+        "feat/SVC-CONTRACT-002-r1": {
+          "pullRequests": [
+            {
+              "baseBranch": "dev",
+              "mergeCommitSha": "9c37775b842c340ba5f6fd51363aac2c25dd79db",
+              "number": 11,
+              "state": "merged"
+            }
+          ]
+        },
+        "feat/SVC-IMPL-007-r1": {
+          "pullRequests": [
+            {
+              "baseBranch": "dev",
+              "mergeCommitSha": "072e7df480091910d92ca5d9a1b589ce4eb984c5",
+              "number": 12,
+              "state": "merged"
+            }
+          ]
+        }
+      },
+      "commits": {
+        "072e7df480091910d92ca5d9a1b589ce4eb984c5": {
+          "checkRuns": [
+            {
+              "app": "github-actions",
+              "attempt": 1,
+              "conclusion": "success",
+              "event": "push",
+              "headBranch": "dev",
+              "name": "Svc Check",
+              "status": "completed",
+              "workflowPath": ".github/workflows/ci.yml"
+            }
+          ],
+          "mergedPullRequests": [
+            12
+          ],
+          "outputs": {
+            "svc-contract": {
+              "present": true,
+              "version": "1.2.0"
+            }
+          },
+          "reachableFromIntegrationHead": true
+        },
+        "9c37775b842c340ba5f6fd51363aac2c25dd79db": {
+          "checkRuns": [
+            {
+              "app": "github-actions",
+              "attempt": 1,
+              "conclusion": "success",
+              "event": "push",
+              "headBranch": "dev",
+              "name": "Svc Check",
+              "status": "completed",
+              "workflowPath": ".github/workflows/ci.yml"
+            }
+          ],
+          "mergedPullRequests": [
+            11
+          ],
+          "outputs": {
+            "svc-contract": {
+              "present": true,
+              "version": "1.2.0"
+            }
+          },
+          "reachableFromIntegrationHead": true
+        }
+      },
+      "integrationHead": "072e7df480091910d92ca5d9a1b589ce4eb984c5"
+    }
+  },
+  "schemaVersion": "factory.evidence-snapshot/v1"
+}
