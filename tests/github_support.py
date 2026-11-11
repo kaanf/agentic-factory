@@ -200,14 +200,20 @@ def comparison(base: str, head: str, status: str = "ahead", *, ahead_by: int | N
     }[status]
     ahead = ahead if ahead_by is None else ahead_by
     commits = [{"sha": "b" * 40}] * (ahead - 1) + [{"sha": head}] if ahead else []
+    owner = REPO.split("/")[0]
     return {
         "ahead_by": ahead,
         "base_commit": {"sha": base},
         "behind_by": behind,
         "commits": commits,
+        "diff_url": f"https://github.com/{REPO}/compare/{base}...{head}.diff",
+        "html_url": f"https://github.com/{REPO}/compare/{base}...{head}",
         "merge_base_commit": {"sha": merge_base},
+        "patch_url": f"https://github.com/{REPO}/compare/{base}...{head}.patch",
+        "permalink_url": f"https://github.com/{REPO}/compare/{owner}:{base[:7]}...{owner}:{head[:7]}",
         "status": status,
         "total_commits": ahead,
+        "url": f"https://api.github.com/repos/{REPO}/compare/{base}...{head}",
     }
 
 

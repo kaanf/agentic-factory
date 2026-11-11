@@ -182,12 +182,53 @@ class _ApprovalCollector:
             raise _Unresolved(f"{what} targets repository {full_name!r}, not {self.repo.github}")
         return number, base["ref"]
 
+    def _names_comparison(self, value: Any, prefix: str, suffix: str) -> bool:
+        """Whether ``value`` is exactly ``prefix + <planning repository> + suffix``.
+
+        Built and compared as a whole string, never parsed or followed. GitHub returns the repository
+        name in its canonical case, so only that part is compared case-insensitively.
+        """
+        return (
+            isinstance(value, str)
+            and len(value) > len(prefix) + len(suffix)
+            and value.startswith(prefix)
+            and value.endswith(suffix)
+            and value[len(prefix) : -len(suffix)].lower() == self.repo.github.lower()
+        )
+
+    def _identify_comparison(self, c: dict[str, Any], sha: str, head: str, what: str) -> None:
+        """Raise unless the response's own URLs name exactly this repository, base, head and direction.
+
+        Which commits a response lists says nothing about which head it compared against: the head of
+        one comparison appears in the commits of many others.
+        """
+        spec = f"/compare/{sha}...{head}"
+        required = {"url": ("https://api.github.com/repos/", spec), "html_url": ("https://github.com/", spec)}
+        optional = {
+            "diff_url": ("https://github.com/", f"{spec}.diff"),
+            "patch_url": ("https://github.com/", f"{spec}.patch"),
+        }
+        for field, (prefix, suffix) in [*required.items(), *((f, v) for f, v in optional.items() if f in c)]:
+            if not self._names_comparison(c.get(field), prefix, suffix):
+                raise _Unresolved(f"{what} does not identify that comparison ({field} is {c.get(field)!r})")
+        # The permalink abbreviates both SHAs, so it can only contradict, never identify.
+        if "permalink_url" in c:
+            owner = re.escape(self.repo.github.split("/")[0])
+            pattern = (
+                rf"https://github\.com/(?i:{re.escape(self.repo.github)})/compare/"
+                rf"(?i:{owner}):([0-9a-f]{{7,40}})\.\.\.(?i:{owner}):([0-9a-f]{{7,40}})"
+            )
+            match = re.fullmatch(pattern, c["permalink_url"]) if isinstance(c["permalink_url"], str) else None
+            if match is None or not sha.startswith(match[1]) or not head.startswith(match[2]):
+                raise _Unresolved(f"{what} does not identify that comparison (permalink_url is {c['permalink_url']!r})")
+
     def _reachable(self, sha: str, head: str) -> bool:
         """Whether ``sha`` is ``head`` or an ancestor of it, from a comparison of exactly those two commits."""
         what = f"comparison of {sha}...{head}"
         c = self.api.get(f"{self.base}/compare/{segment(sha)}...{segment(head)}")
         if not isinstance(c, dict):
             raise _Unresolved(f"{what} is malformed")
+        self._identify_comparison(c, sha, head, what)
         base_sha = c["base_commit"].get("sha") if isinstance(c.get("base_commit"), dict) else None
         if base_sha != sha:
             raise _Unresolved(f"{what} describes base {base_sha!r}")
@@ -220,9 +261,10 @@ class _ApprovalCollector:
                 f"merge base {merge_base})"
             )
         if ahead:
-            # The commits on the head side include the head itself, which identifies it.
+            # Consistency only: the head was identified from the URLs above. Without pagination GitHub
+            # lists at most 250 commits, and a partial list cannot be checked.
             if len(listed) != ahead:
-                raise _Unresolved(f"{what} lists {len(listed)} of {ahead} commits, so its head cannot be confirmed")
+                raise _Unresolved(f"{what} lists {len(listed)} of {ahead} commits, so it cannot be checked")
             if head not in listed:
                 raise _Unresolved(f"{what} does not include the integration head")
         elif listed:

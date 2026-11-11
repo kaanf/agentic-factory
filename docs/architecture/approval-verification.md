@@ -116,7 +116,29 @@ The repository itself was resolved at the start of collection (renames and trans
 
 ### Compare responses
 
-`compare/{merge}...{head}` is accepted only as a coherent statement about exactly those commits:
+`compare/{merge}...{head}` is accepted only as a coherent statement about exactly those commits.
+
+First, the response must identify the comparison it answers. Which commits it lists does not: the
+head of one comparison appears among the commits of many others. (In `git/git`, the genuine
+`fbd2d1e...1891de4` response is `ahead` and lists `03b4152`, while `fbd2d1e...03b4152` itself is
+`diverged`. That substitution is a regression test, using the recorded real responses.) Identity
+comes from the response's own URL fields, which GitHub fills with the full requested SHAs:
+
+| Field | Requirement |
+|---|---|
+| `url` | Required. Exactly `https://api.github.com/repos/{repository}/compare/{merge}...{head}` |
+| `html_url` | Required. Exactly `https://github.com/{repository}/compare/{merge}...{head}` |
+| `diff_url`, `patch_url` | If present, `html_url` plus `.diff` / `.patch` |
+| `permalink_url` | If present, `https://github.com/{repository}/compare/{owner}:{b}...{owner}:{h}`, where `b` and `h` (at least 7 hex) are prefixes of the merge and head SHAs. It abbreviates both SHAs, so it can contradict but never identifies |
+
+The expected strings are built from the requested values and compared whole: no parsing, decoding or
+normalization, and no URL from a response is ever requested. Scheme, host, port, user info, path,
+range separator (`...`, so the order is fixed), suffix, query and fragment must all match exactly,
+and SHAs must be the full lowercase values. Only `{repository}` is compared case-insensitively,
+because GitHub returns the canonical case of the name. A missing, malformed or contradictory field
+omits the entry (UNKNOWN).
+
+Then:
 
 - `base_commit.sha` must equal the requested merge commit.
 - `ahead_by`, `behind_by` are non-negative integers, `total_commits` equals `ahead_by`,
@@ -130,9 +152,9 @@ The repository itself was resolved at the start of collection (renames and trans
   | `behind` | merge ≠ head, `ahead_by` = 0, `behind_by` > 0, merge base = head | no (omitted) |
   | `diverged` | both counts > 0, merge base is neither | no (omitted) |
 
-- When `ahead_by` > 0, `commits` must list all of them and include the head. The response has no
-  head field, so this is how its head is identified. Without pagination, GitHub lists at most 250
-  commits; a longer range therefore cannot be confirmed and the entry is omitted.
+- When `ahead_by` > 0, `commits` must list all of them and include the head. This is a consistency
+  check only; the head was identified from the URLs. Without pagination, GitHub lists at most 250
+  commits; a longer range cannot be checked, so the entry is omitted.
 
 Anything else, including an unknown status, is omitted. Reachability is never read from the status
 string alone.
@@ -162,6 +184,10 @@ judgment depends on is never read as that field's "false" value.
   objects across a fork network). Every commit this collector looks up comes from a record of the
   planning repository itself, which limits but does not remove that ambiguity.
 - Comparisons over more than 250 commits are omitted rather than paginated.
+- Comparison identity assumes github.com (`api.github.com`, `github.com`). A GitHub Enterprise host,
+  or a `gh` CLI configured for one, fails closed. So would a change in GitHub's URL format.
+- Identity checks trust what GitHub's API returns over the authenticated `gh` channel. They catch a
+  response that belongs to another comparison, not a forged one.
 - Only 40-hex (SHA-1) object IDs are accepted.
 - The Stage 2 collector's own reachability and output-file checks are not held to these rules yet.
 

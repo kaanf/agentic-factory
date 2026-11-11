@@ -17,6 +17,7 @@ import pytest
 from conftest import codes
 from github_support import (
     BASE,
+    FIXTURES,
     REPO,
     FakeTransport,
     Sequence,
@@ -977,7 +978,9 @@ CONTRADICTORY = "is contradictory"
     ("response", "message"),
     [
         pytest.param(
-            {"status": "identical", "base_commit": {"sha": OTHER}}, "describes base", id="reported-counterexample"
+            {"status": "identical", "base_commit": {"sha": OTHER}},
+            "does not identify that comparison",
+            id="reported-counterexample",
         ),
         pytest.param(_compared(base_commit={"sha": OTHER}), "describes base", id="base-sha-conflicts"),
         pytest.param(_compared(base_commit=None), "describes base", id="base-commit-missing"),
@@ -1048,6 +1051,203 @@ def test_coherent_identical_comparison_when_the_merge_is_the_head(project: Path)
     snapshot, transport = collected(project, responses)
     assert q(f"{BASE}/compare/{MERGE}...{MERGE}") in transport.requests
     assert (entry(snapshot)["approved"], entry(snapshot)["evidence"]) == (True, "MERGED_PULL_REQUEST")
+
+
+# -- a compare response must identify the requested comparison, not merely list the head ---------
+
+GIT_GIT = json.loads((FIXTURES / "github" / "git-git-compare.json").read_text())["responses"]
+GIT_B = "fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e"
+GIT_H = "03b41523c576f26ad34085378717a0c1b287470f"
+GIT_L = "1891de46f79dc444a47db1c87bd0c8c76b5463f2"
+
+
+def _rewrite(value: Any, mapping: dict[str, str]) -> Any:
+    if isinstance(value, str):
+        for old, new in mapping.items():
+            value = value.replace(old, new)
+        return value
+    if isinstance(value, Response):
+        return Response(value.status, _rewrite(value.body, mapping), value.headers)
+    if isinstance(value, dict):
+        return {_rewrite(k, mapping): _rewrite(v, mapping) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_rewrite(v, mapping) for v in value]
+    return value
+
+
+def _git_git_world(project: Path, head: str, compare: dict[str, Any]) -> dict[str, Any]:
+    """The usual world moved to git/git, with PR #7 merged as GIT_B and the given integration head."""
+    manifest = project / "factory/project.yaml"
+    manifest.write_text(manifest.read_text().replace(REPO, "git/git"))
+    # Full SHAs first, then the 7-character abbreviations left in permalink URLs.
+    mapping = {
+        REPO: "git/git",
+        "example-org": "git",
+        MERGE: GIT_B,
+        HEAD: head,
+        MERGE[:7]: GIT_B[:7],
+        HEAD[:7]: head[:7],
+    }
+    responses = _rewrite(approved_world(project), mapping)
+    responses[q(f"repos/git/git/compare/{GIT_B}...{head}")] = compare
+    return responses
+
+
+def test_real_comparison_for_another_head_is_not_accepted(project: Path, tmp_path: Path) -> None:
+    """git/git's genuine B...L response (ahead, listing H) substituted for the requested B...H."""
+    assert GIT_H in [c["sha"] for c in GIT_GIT["BL"]["commits"]]
+    snapshot, _ = collected(project, _git_git_world(project, GIT_H, GIT_GIT["BL"]))
+    assert_omitted(project, tmp_path, snapshot, f"comparison of {GIT_B}...{GIT_H} does not identify that comparison")
+
+
+def test_cli_reports_real_comparison_for_another_head_with_exit_3(project: Path, tmp_path: Path) -> None:
+    code, err, snapshot = cli_collect(project, tmp_path, _git_git_world(project, GIT_H, GIT_GIT["BL"]))
+    assert code == 3
+    assert f"comparison of {GIT_B}...{GIT_H} does not identify that comparison" in err
+    assert entry(snapshot) is None
+
+
+def test_real_comparison_for_the_requested_head_is_judged_on_its_merits(project: Path, tmp_path: Path) -> None:
+    """The genuine B...H response is diverged: identified, coherent, and not reachable."""
+    snapshot, _ = collected(project, _git_git_world(project, GIT_H, GIT_GIT["BH"]))
+    assert_omitted(project, tmp_path, snapshot, "not reachable from the integration head")
+
+
+def test_real_ahead_comparison_for_the_requested_head_is_reachable(project: Path) -> None:
+    snapshot, _ = collected(project, _git_git_world(project, GIT_L, GIT_GIT["BL"]))
+    assert (entry(snapshot)["approved"], entry(snapshot)["evidence"]) == (True, "MERGED_PULL_REQUEST")
+    assert snapshot["collection"]["complete"] is True
+
+
+API = f"https://api.github.com/repos/{REPO}/compare"
+WEB = f"https://github.com/{REPO}/compare"
+OWNER = REPO.split("/")[0]
+NOT_IDENTIFIED = "does not identify that comparison"
+
+
+def _for_other_head(head_position: int) -> dict[str, Any]:
+    """An ahead comparison of MERGE...OTHER that lists HEAD among its commits."""
+    response = comparison(MERGE, OTHER, "ahead", ahead_by=3)
+    response["commits"] = [{"sha": OTHER}, {"sha": OTHER}, {"sha": OTHER}]
+    response["commits"][head_position] = {"sha": HEAD}
+    return response
+
+
+@pytest.mark.parametrize(
+    ("response", "message"),
+    [
+        pytest.param(_for_other_head(0), NOT_IDENTIFIED, id="head-early-in-commits-of-another-comparison"),
+        pytest.param(_for_other_head(-1), NOT_IDENTIFIED, id="head-last-in-commits-of-another-comparison"),
+        pytest.param(_compared(url=f"{API}/{OTHER}...{HEAD}"), NOT_IDENTIFIED, id="url-wrong-base"),
+        pytest.param(_compared(url=f"{API}/{MERGE}...{OTHER}"), NOT_IDENTIFIED, id="url-wrong-head"),
+        pytest.param(_compared(url=f"{API}/{HEAD}...{MERGE}"), NOT_IDENTIFIED, id="url-reversed"),
+        pytest.param(
+            _compared(url=f"https://api.github.com/repos/other/repo/compare/{MERGE}...{HEAD}"),
+            NOT_IDENTIFIED,
+            id="url-wrong-repository",
+        ),
+        pytest.param(
+            _compared(url=f"https://api.github.com/repos/{REPO}-fork/compare/{MERGE}...{HEAD}"),
+            NOT_IDENTIFIED,
+            id="url-repository-name-extended",
+        ),
+        pytest.param(
+            _compared(url=f"https://evil.example/repos/{REPO}/compare/{MERGE}...{HEAD}"), NOT_IDENTIFIED, id="url-host"
+        ),
+        pytest.param(
+            _compared(url=f"http://api.github.com/repos/{REPO}/compare/{MERGE}...{HEAD}"),
+            NOT_IDENTIFIED,
+            id="url-scheme",
+        ),
+        pytest.param(
+            _compared(url=f"https://x@api.github.com/repos/{REPO}/compare/{MERGE}...{HEAD}"),
+            NOT_IDENTIFIED,
+            id="url-userinfo",
+        ),
+        pytest.param(
+            _compared(url=f"https://api.github.com:443/repos/{REPO}/compare/{MERGE}...{HEAD}"),
+            NOT_IDENTIFIED,
+            id="url-port",
+        ),
+        pytest.param(
+            _compared(url=f"https://api.github.com/repos/{REPO}/x/../compare/{MERGE}...{HEAD}"),
+            NOT_IDENTIFIED,
+            id="url-dot-segment",
+        ),
+        pytest.param(_compared(url=f"{API}/{MERGE}...{HEAD}?page=2"), NOT_IDENTIFIED, id="url-query"),
+        pytest.param(_compared(url=f"{API}/{MERGE}...{HEAD}#x"), NOT_IDENTIFIED, id="url-fragment"),
+        pytest.param(_compared(url=f"{API}/{MERGE}...{HEAD}/"), NOT_IDENTIFIED, id="url-trailing-slash"),
+        pytest.param(_compared(url=f"{API}/{MERGE}...{HEAD}\n"), NOT_IDENTIFIED, id="url-trailing-newline"),
+        pytest.param(_compared(url=f"{API}/{MERGE}...{HEAD}.diff"), NOT_IDENTIFIED, id="url-suffix"),
+        pytest.param(_compared(url=f"{API}/{MERGE}..{HEAD}"), NOT_IDENTIFIED, id="url-two-dot-range"),
+        pytest.param(_compared(url=f"{API}/{MERGE}%2E%2E%2E{HEAD}"), NOT_IDENTIFIED, id="url-percent-encoded"),
+        pytest.param(_compared(url=f"{API}/{MERGE.upper()}...{HEAD}"), NOT_IDENTIFIED, id="url-uppercase-sha"),
+        pytest.param(_compared(url=f"{API}/{MERGE[:7]}...{HEAD[:7]}"), NOT_IDENTIFIED, id="url-abbreviated-shas"),
+        pytest.param(_compared(url=None), NOT_IDENTIFIED, id="url-missing"),
+        pytest.param(_compared(url=["x"]), NOT_IDENTIFIED, id="url-not-a-string"),
+        pytest.param(_compared(html_url=None), NOT_IDENTIFIED, id="html-url-missing"),
+        pytest.param(_compared(html_url=f"{WEB}/{MERGE}...{OTHER}"), NOT_IDENTIFIED, id="html-url-contradicts"),
+        pytest.param(_compared(diff_url=f"{WEB}/{MERGE}...{OTHER}.diff"), NOT_IDENTIFIED, id="diff-url-contradicts"),
+        pytest.param(_compared(patch_url=f"{WEB}/{MERGE}...{HEAD}"), NOT_IDENTIFIED, id="patch-url-contradicts"),
+        pytest.param(
+            _compared(permalink_url=f"{WEB}/{OWNER}:{MERGE[:7]}...{OWNER}:{OTHER[:7]}"),
+            NOT_IDENTIFIED,
+            id="permalink-names-another-head",
+        ),
+        pytest.param(
+            _compared(permalink_url=f"{WEB}/{OWNER}:{MERGE[:6]}...{OWNER}:{HEAD[:7]}"),
+            NOT_IDENTIFIED,
+            id="permalink-sha-too-short",
+        ),
+        pytest.param(
+            _compared(url=None, html_url=None, diff_url=None, patch_url=None),
+            NOT_IDENTIFIED,
+            id="only-abbreviated-permalink",
+        ),
+    ],
+)
+def test_compare_response_must_identify_the_requested_comparison(
+    project: Path, tmp_path: Path, response: dict[str, Any], message: str
+) -> None:
+    responses = approved_world(project)
+    responses[q(f"{BASE}/compare/{MERGE}...{HEAD}")] = response
+    snapshot, _ = collected(project, responses)
+    assert_omitted(project, tmp_path, snapshot, message)
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        pytest.param({}, id="as-returned"),
+        pytest.param({"permalink_url": f"{WEB}/{OWNER}:{MERGE}...{OWNER}:{HEAD}"}, id="permalink-full-shas"),
+        pytest.param({"permalink_url": None, "diff_url": None, "patch_url": None}, id="optional-urls-absent"),
+        pytest.param(
+            {
+                "url": f"https://api.github.com/repos/{REPO.upper()}/compare/{MERGE}...{HEAD}",
+                "html_url": f"https://github.com/{REPO.upper()}/compare/{MERGE}...{HEAD}",
+            },
+            id="repository-name-in-other-case",
+        ),
+    ],
+)
+def test_identified_ahead_comparison_variants_are_accepted(project: Path, fields: dict[str, Any]) -> None:
+    responses = approved_world(project)
+    responses[q(f"{BASE}/compare/{MERGE}...{HEAD}")] = {
+        **comparison(MERGE, HEAD, "ahead"),
+        **{k: v for k, v in fields.items() if v is not None},
+    }
+    for key in [k for k, v in fields.items() if v is None]:
+        del responses[q(f"{BASE}/compare/{MERGE}...{HEAD}")][key]
+    snapshot, _ = collected(project, responses)
+    assert (entry(snapshot)["approved"], entry(snapshot)["evidence"]) == (True, "MERGED_PULL_REQUEST")
+
+
+@pytest.mark.parametrize("status", ["behind", "diverged"])
+def test_identified_comparison_that_does_not_reach_the_head_is_omitted(
+    project: Path, tmp_path: Path, status: str
+) -> None:
+    snapshot, _ = collected(project, approved_world(project, compare=status))
+    assert_omitted(project, tmp_path, snapshot, "not reachable from the integration head")
 
 
 # -- base branches must be valid git branch names ---------------------------------------------
