@@ -1,25 +1,51 @@
-# Archon probes (opt-in, bash only)
+# Archon probes (manual, opt-in)
 
 Factory Core's command builder relies on Archon behavior that the test suite cannot verify offline.
-These probes check it against the installed Archon, one repository at a time, **without a coding
-agent**: the probe workflow contains only bash nodes. Nothing in Factory Core or its tests runs them.
+These probes check it against the installed Archon, one repository at a time. **They are not part of
+Factory Core's dry-run interface**: no `factory` command runs them, the test suite exercises only
+their refusal paths, and each run needs a separate, explicit human authorization.
 
-**Status: prepared, not run.** Running a probe needs a separate, explicit human authorization. Record
-results at the bottom of this file.
+**Status: prepared, not run.** Record results at the bottom of this file.
+
+## What a probe executes
+
+"Bash-only" describes the probe *workflow*, not the whole run. An authorized probe executes:
+
+- the **Archon binary**: `archon --version`, then one `archon workflow run`, including worktree
+  creation, run bookkeeping in `~/.archon/archon.db`, and whatever Archon does at run start. That
+  includes resolving the configured AI provider (Archon composes it from its config files and its
+  database); no prompt is sent because the workflow has no prompt node, but the probe cannot prove
+  that Archon contacts no provider service at all;
+- the probe workflow's single **bash node**, which only reads git state and prints it;
+- **git**, read-only (`--no-optional-locks status`, `rev-parse`, `merge-base`, `ls-remote`).
+
+The script refuses, before starting Archon at all, a checkout whose `.archon/config.yaml` sets worktree
+hooks or copies (`postCreate`, `copyFiles`, `initSubmodules`), environment, assistant, tier, alias,
+workflow, default or command settings, or that already has workflow definitions: Archon would apply
+them to the probe run, and `postCreate` executes repository-defined commands.
 
 ## What a probe changes
 
-Read this before authorizing.
-
 - Writes one untracked file, `.archon/workflows/factory-probe-<stamp>.yaml`, in the checkout, and
   removes it when the script exits (also on failure).
-- Runs `archon workflow run` once. Archon creates a worktree and a **local** branch
-  `factory-probe/<stamp>` and records the run in `~/.archon/archon.db`. Both stay until you remove
-  them with `archon complete factory-probe/<stamp>`.
+- Archon creates a worktree and a **local** branch `factory-probe/<stamp>` and records the run in
+  `~/.archon/archon.db`. Both stay until you remove them with `archon complete factory-probe/<stamp>`.
 - Writes the run output to `/tmp/factory-probe-<stamp>.log`.
-- Does **not** push, fetch, merge, open a PR, delete anything, or start Claude Code or Codex.
-- Refuses to start if the checkout has uncommitted changes, if the installed Archon version is not the
-  expected one, or if a branch argument is unsafe.
+- Does **not** push, fetch, merge, open a PR or delete anything, and never runs a workflow with
+  prompt nodes (Claude Code or Codex are not started by the workflow).
+
+## Safer design (recommended before running any probe)
+
+The residual risk is Archon's own behavior at run start. Reduce it by running probes where an
+unexpected provider call cannot succeed and cannot reach your credentials:
+
+1. Run as the separate agent OS user from Stage 6 prerequisite P2, with **no** Claude Code or Codex
+   login and no provider API keys in the environment.
+2. Use a disposable clone registered as its own Archon project, not the working checkout.
+3. Inspect `~/.archon/config.yaml` and the clone's `.archon/config.yaml` first; the script checks the
+   latter only.
+4. Run under `DO_NOT_TRACK=1` (the script sets it) and with network egress restricted to GitHub if
+   your environment allows it.
 
 ## Probe 1: base branch and worktree
 
@@ -47,21 +73,20 @@ FACTORY_ARCHON_PROBE_AUTHORIZED="$(cd <checkout> && pwd -P)" \
 archon complete factory-probe/<stamp>
 ```
 
-## Probe 2: provider selection (manual, no agent)
+## Probe 2: provider selection (not a run)
 
-Archon 0.14.0's `workflow run` has no provider option, so the adapter refuses any provider other than
-Archon's `defaultAssistant`. To learn whether `--model` or a `--config` layer could select a provider
-without running an agent:
+Archon 0.14.0's `workflow run` has no provider option, and the effective provider is composed from
+the global `defaultAssistant`, a repository `assistant` (which overrides it), tier and `@alias`
+bindings in both files, and per-user and per-codebase settings held in Archon's database. Factory
+Core checks every file layer (`PROVIDER_OVERRIDDEN_BY_REPOSITORY`, `MODEL_BINDING_PROVIDER_MISMATCH`,
+`WORKFLOW_OVERRIDE_PRESENT`, ...) and reports the database layers as unobserved
+(`ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED`), so no preflight passes.
 
-1. `archon workflow run archon-implement --dry-run --default-stubs "probe"` in a checkout. Archon
-   documents `--dry-run` as simulating the workflow DAG "without creating a run or contacting a
-   provider".
-2. Repeat with `--model large=<a model of the other provider>` and note whether the dry-run output
-   names the resolved provider.
-3. If the output does not name the provider, per-run provider selection remains **unverified** and the
-   adapter keeps refusing non-default providers (`PROVIDER_NOT_ARCHON_DEFAULT`).
-
-Never run a non-dry-run `archon-implement` (or any workflow with prompt nodes) as a probe.
+**Do not probe provider selection by running a coding workflow**, not even with `--dry-run`: the
+command names the agent workflow and depends on a single flag to stay inert. Establishing the
+database layers is a Stage 6 prerequisite and needs either a documented, read-only Archon interface
+for the effective AI configuration of a run, or an Archon configuration in which per-user
+preferences are provably disabled for the agent OS user.
 
 ## Probe 3: message argument
 

@@ -62,7 +62,9 @@ and not human approval.
 `preflight` runs every dispatch precondition it can observe (task revision and readiness, workflow
 and provider policy, the Archon version from its install record, the checkout's Archon configuration
 and branches, run records, reconciliation) and builds the Archon command as an argument vector. Its
-report keeps the dry-run result apart from authorization, which is never granted in this version.
+report keeps the dry-run result apart from authorization, which is never granted in this version. The
+dry run itself cannot pass yet: Archon's database-held AI configuration can change the provider and
+is not readable, so the effective provider is never established.
 `reconcile` classifies one task revision's dispatch state (Stage 4B §7) from run records, local and
 remote branches and pull requests, read-only. Neither has an option to execute anything. See
 [archon-adapter.md](docs/architecture/archon-adapter.md) for their exit codes, every reason code and
@@ -115,6 +117,8 @@ Schemas: `src/factory/schemas/*.schema.json` (JSON Schema 2020-12, shipped insid
 - [Archon adapter](docs/architecture/archon-adapter.md): Stage 5 preflight, command builder, run
   records, reconciliation, security boundaries and Stage 6 prerequisites.
 - [Decision 0005](docs/decisions/0005-stage5-archon-adapter.md): Stage 5 decisions and deviations.
+- [Decision 0006](docs/decisions/0006-stage5-security-remediation.md): Stage 5 security review
+  findings F1-F6 and their fixes.
 - [Archon probes](docs/probes/archon-probes.md): opt-in, bash-only probe procedure (not run).
 - [Technical debt](docs/technical-debt.md): known limitations and their classification.
 

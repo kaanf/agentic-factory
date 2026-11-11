@@ -41,10 +41,11 @@ from factory.issues import Issue
 from factory.live import plan_live
 from factory.output import OutputError, SnapshotOutput
 from factory.planning import Plan, Result, evaluate
-from factory.preflight import preflight
+from factory.preflight import lock_refusal, preflight
 from factory.reconcile import State as ReconcileState
 from factory.reconcile import decide, observe, reconcile_document
 from factory.render import plan_text, preflight_text, reconcile_text, to_json, validation_document
+from factory.runs import probe_lock
 from factory.validation import validate_project
 
 EXIT_OK = 0
@@ -269,6 +270,12 @@ def _preflight(
     if result.errors:
         return _report_invalid(result.errors, result.warnings, args.format, project_id, out, err)
     assert project is not None
+    if probe_lock(args.state_dir, project.manifest.project_id) == "held":
+        # Refuse before any evidence is collected: no GitHub request, no snapshot read. This is an
+        # early observation, not exclusive locking; preflight() checks the lock again itself.
+        document = lock_refusal(project, args.task, None).to_dict()
+        out.write(to_json(document) if args.format == "json" else preflight_text(document))
+        return EXIT_INCOMPLETE
     incomplete = False
     api: GitHubApi | None = None
     if args.live:

@@ -30,10 +30,10 @@ from typing import Any
 
 from factory.collector import branch_pull_requests
 from factory.github import GitHubApi, GitHubError, path_of
-from factory.gitstate import CheckoutState, GitStateError, github_slug, read_checkout
+from factory.gitstate import ABSENT, PRESENT, CheckoutState, GitStateError, github_slug, read_checkout
 from factory.model import Project, Repository, Task
 from factory.planning import task_branch
-from factory.refs import is_branch
+from factory.refs import is_branch, is_object_id
 from factory.runs import RevisionRecords, TaskRecords, probe_lock, read_task_records
 
 RECONCILE_SCHEMA_VERSION = "factory.reconcile/v1"
@@ -382,7 +382,7 @@ def decide(obs: Observations) -> Reconciliation:
 class RemoteFacts:
     """Remote branches of this task (by revision) and pull requests (by branch). None: unread."""
 
-    branches: dict[int, bool] | None
+    branches: frozenset[int] | None  # revisions whose branch exists on GitHub; None: unread
     pulls: dict[str, tuple[Pull, ...] | None]
     findings: tuple[Finding, ...]
 
@@ -391,23 +391,50 @@ def _revision_branch(repo: Repository, task: Task, revision: int) -> str:
     return f"{repo.feature_prefix}{task.id}-r{revision}"
 
 
+# matching-refs has no pagination or completeness signal; a listing this long is not trusted.
+MAX_MATCHING_REFS = 100
+
+
+def remote_branch_names(api: GitHubApi, repo: Repository, prefix: str) -> set[str]:
+    """Names of the branches on GitHub that start with ``prefix``. Read-only.
+
+    Every entry must be a complete ref (``refs/heads/...`` name inside the prefix, an object id). A
+    malformed entry, or a listing too long to be known complete, raises ``GitHubError``: an
+    incomplete listing is never an empty one.
+    """
+    refs = api.get(f"repos/{repo.github}/git/matching-refs/heads/{path_of(prefix)}")
+    if not isinstance(refs, list):
+        raise GitHubError(f"matching refs for {prefix}: expected a list")
+    if len(refs) >= MAX_MATCHING_REFS:
+        raise GitHubError(f"matching refs for {prefix}: {len(refs)} entries; the listing may be incomplete")
+    names = set()
+    for index, ref in enumerate(refs):
+        name = ref.get("ref") if isinstance(ref, dict) else None
+        target = ref.get("object") if isinstance(ref, dict) else None
+        sha = target.get("sha") if isinstance(target, dict) else None
+        if not isinstance(name, str) or not name.startswith("refs/heads/") or not is_object_id(sha):
+            raise GitHubError(f"matching refs for {prefix}: entry {index} is incomplete")
+        branch = name[len("refs/heads/") :]
+        if not branch.startswith(prefix):
+            raise GitHubError(f"matching refs for {prefix}: entry {index} is outside the requested prefix")
+        names.add(branch)
+    return names
+
+
 def read_remote(api: GitHubApi, repo: Repository, task: Task) -> RemoteFacts:
     """Read-only GitHub reads: matching branch refs and pull requests for every revision's branch."""
     findings: list[Finding] = []
     prefix = f"{repo.feature_prefix}{task.id}-r"
     exact = re.compile(re.escape(f"refs/heads/{prefix}") + r"([1-9][0-9]{0,8})")
-    branches: dict[int, bool] | None
+    branches: frozenset[int] | None
     try:
-        refs = api.get(f"repos/{repo.github}/git/matching-refs/heads/{path_of(prefix)}")
-        if not isinstance(refs, list):
-            raise GitHubError("expected a list of refs")
         found = set()
-        for ref in refs:
-            name = ref.get("ref") if isinstance(ref, dict) else None
-            match = exact.fullmatch(name) if isinstance(name, str) else None
+        for name in remote_branch_names(api, repo, prefix):
+            match = exact.fullmatch(f"refs/heads/{name}")
             if match:
                 found.add(int(match.group(1)))
-        branches = {revision: revision in found for revision in range(1, task.revision + 1)}
+        # Only the revisions that exist are kept: memory is bounded by the listing, not the revision.
+        branches = frozenset(found)
         for revision in sorted(found):
             if revision > task.revision:
                 findings.append(
@@ -436,10 +463,34 @@ def read_remote(api: GitHubApi, repo: Repository, task: Task) -> RemoteFacts:
     return RemoteFacts(branches, pulls, tuple(findings))
 
 
+def _fact(state: str) -> bool | None:
+    """``present`` -> True, ``absent`` -> False, anything else (``unknown``) -> None."""
+    return {PRESENT: True, ABSENT: False}.get(state)
+
+
 def _local(checkout: CheckoutState | None, branch: str) -> tuple[bool | None, bool | None]:
     if checkout is None:
         return None, None
-    return branch in checkout.branches, bool(checkout.worktrees_on(branch))
+    return _fact(checkout.branch_state(branch)), _fact(checkout.worktree_state(branch))
+
+
+def _local_ref_findings(checkout: CheckoutState, branches: list[str]) -> list[Finding]:
+    """Unresolved or unknown local state that concerns this task's branches is UNCERTAIN, never a note."""
+    findings = []
+    for branch in branches:
+        why = checkout.local.unresolved.get(branch)
+        if why is not None:
+            findings.append(_uncertain("LOCAL_REF_UNRESOLVED", f"local ref {branch} {why}", branch))
+        for name, why in checkout.remote.unresolved.items():
+            if name.partition("/")[2] == branch:
+                findings.append(
+                    _uncertain("REMOTE_TRACKING_REF_UNRESOLVED", f"remote-tracking ref {name} {why}", branch)
+                )
+    targets = {f"'refs/heads/{b}'" for b in branches}
+    for name, why in checkout.local.unresolved.items():
+        if any(target in why for target in targets):
+            findings.append(_uncertain("SYMBOLIC_REF_TO_TASK_BRANCH", f"local ref {name} {why}", name))
+    return findings
 
 
 def read_local(checkout_path: Path, repo: Repository) -> tuple[CheckoutState | None, list[Finding]]:
@@ -456,6 +507,7 @@ def read_local(checkout_path: Path, repo: Repository) -> tuple[CheckoutState | N
                 "CHECKOUT_REPOSITORY_MISMATCH", f"the checkout's origin is {slug}, the manifest says {repo.github}"
             )
         ]
+    # Notes only; anything that concerns the task's own branches is raised again by observe().
     findings = [_info("CHECKOUT_NOTE", problem) for problem in state.problems]
     return state, findings
 
@@ -519,7 +571,7 @@ def observe(
             records=records.revision(revision) if records.readable else None,
             local=local,
             worktree=worktree,
-            remote=remote.branches.get(revision) if remote.branches is not None else None,
+            remote=revision in remote.branches if remote.branches is not None else None,
             pulls=remote.pulls.get(branch) if api is not None else None,
         )
 
@@ -528,8 +580,10 @@ def observe(
     older = tuple(facts(r) for r in range(max(1, task.revision - MAX_HISTORY), task.revision))
     newer = tuple(r for r in records.revisions if r > task.revision)
     if checkout is not None:
+        own = [_revision_branch(repo, task, r) for r in range(max(1, task.revision - MAX_HISTORY), task.revision + 1)]
+        findings.extend(_local_ref_findings(checkout, own))
         prefix = f"{repo.feature_prefix}{task.id}-r"
-        for name in checkout.branches:
+        for name in checkout.local.names():
             suffix = name[len(prefix) :] if name.startswith(prefix) else ""
             if suffix.isdigit() and not suffix.startswith("0") and int(suffix) > task.revision:
                 findings.append(

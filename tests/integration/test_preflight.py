@@ -108,11 +108,17 @@ def _live_preflight(env: Env, responses: dict[str, Any] | None = None, task: str
 # -- valid preflight and the authorization boundary -------------------------------------------------
 
 
-def test_valid_preflight_passes_the_dry_run_and_is_never_authorized(env: Env) -> None:
+def test_valid_preflight_is_unknown_only_for_the_unobservable_provider_and_never_authorized(env: Env) -> None:
+    """Every observable check passes; the one left is that Archon's database layers can change the
+    provider and cannot be read (F4), so the dry run is UNKNOWN, never PASS."""
     report, transport = _live_preflight(env)
     document = report.to_dict()
-    assert document["dryRun"]["result"] == "PASS", document["dryRun"]
-    assert {c["code"] for c in document["dryRun"]["checks"]} == {"TASK_READY", "COMMAND_BUILT"}
+    assert document["dryRun"]["result"] == "UNKNOWN", document["dryRun"]
+    assert {c["code"]: c["result"] for c in document["dryRun"]["checks"]} == {
+        "TASK_READY": "PASS",
+        "COMMAND_BUILT": "PASS",
+        "ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED": "UNKNOWN",
+    }
     assert document["reconciliation"]["state"] == "NO_RUN"
     assert document["authorization"]["granted"] is False
     reasons = {r["code"] for r in document["authorization"]["reasons"]}
@@ -139,8 +145,13 @@ def test_simulated_ready_never_becomes_authorization(env: Env) -> None:
     report, _ = _live_preflight(env)
     assert report.plan is not None
     assert next(t for t in report.plan.tasks if t.task.id == "APP-1").state.value == "READY"
-    assert report.result.value == "PASS"
     assert report.authorization.granted is False
+    # Even a dry run forced to PASS (every non-PASS check removed) grants nothing: authorization is
+    # computed independently of the dry-run checks.
+    forced = dataclasses.replace(report, checks=tuple(c for c in report.checks if c.result.value == "PASS"))
+    assert forced.result.value == "PASS"
+    assert forced.authorization.granted is False
+    assert forced.to_dict()["authorization"]["granted"] is False
 
 
 def test_authorization_is_refused_for_every_evidence_kind_and_even_with_dispatch_enabled(env: Env) -> None:

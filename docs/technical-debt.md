@@ -1,6 +1,7 @@
 # Technical debt register
 
-Known limitations carried by Factory Core v0.1, as of Stage 5. Classification:
+Known limitations carried by Factory Core v0.1, as of Stage 5 after the security review remediation
+(decision 0006). Classification:
 
 - **Stage 5 blocker**: invalidates a guarantee of the dry run, the run-record reader or read-only
   reconciliation (nothing executes, nothing is written, nothing is invented). Must be fixed in Stage 5.
@@ -15,6 +16,9 @@ pass the schema with a trailing newline are refused), but the schemas themselves
 7 are unchanged and remain Stage 6 prerequisites, now guarded by a structural invariant (preflight
 `authorization.granted` is never true; decision 0005, S2); 9 does not apply to Stage 5, which writes
 nothing.
+
+Security review of PR #5: findings F1-F6 are **fixed** (decision 0006) and are listed below only
+where a residual limitation remains (items 11, 13, 18, 19, 20). The review found no dispatch bypass.
 
 History: item 6 was narrowed in Stage 4 (end-of-collection head
 confirmation). The one blocker found in review, evidence output overwriting a project file through a
@@ -34,8 +38,12 @@ hard or symbolic link, was fixed in Stage 4 (decision 0004, L11); its residual r
 | 10 | Archon facts are recorded claims: version from `install.json`, default assistant from `config.yaml`; the binary is never run or hashed | `archon.read_archon_home` | A replaced binary or edited file passes the version check. The dry run authorizes nothing | **Future security prerequisite**: Stage 6 runs `archon --version` (and checks a binary hash) at action time |
 | 11 | Preflight and reconcile observations are not atomic: checkout, records, lock and GitHub are read at different moments without holding the lock | `preflight.preflight`, `reconcile.observe` | A state change between reads can give a stale or mixed answer. Inputs (manifest, task) are re-hashed at the end; everything else is advisory | **Future security prerequisite**: Stage 6 recomputes everything under the exclusive lock |
 | 12 | Archon's run status is not observed | `reconcile` | An orphaned Archon run after an interrupted dispatch is reported as UNCERTAIN with a pointer to `archon workflow runs`, not detected | Nonblocking hardening; needs a documented Archon read interface |
-| 13 | Per-run provider selection in Archon is unverified | `archon.check_assistant` | Tasks whose provider is not Archon's default are refused (`PROVIDER_NOT_ARCHON_DEFAULT`) | Nonblocking (fails closed); revisit after probe 2 |
-| 14 | Live bash-only probes not run | `docs/probes/archon-probes.md` | `--base` / `$BASE_BRANCH` / message-argument behavior rests on the earlier manual verification in the pilot workspace, not on a probe of this adapter's exact command | **Future security prerequisite**: run with explicit authorization before Stage 6 |
+| 13 | The effective Archon provider is not established. File layers (global `defaultAssistant`, repository `assistant`, tier and alias bindings, workflow overrides) are checked (F4 fixed); Archon's database-held layers (per-user AI preferences, per-codebase settings) are not readable | `archon.check_effective_provider` | Every preflight reports `ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED` (UNKNOWN), so no dry run passes. Fails closed | **Future security prerequisite**: a documented read interface for a run's effective AI configuration, or per-user preferences provably disabled for the agent OS user |
+| 14 | Live probes not run. The probe script is a manual execution path (Archon binary, one bash node, read-only git), refused for repositories with hooks or AI overrides; the former provider probe that named `archon-implement` was removed | `docs/probes/archon-probes.md`, `scripts/probes/` | `--base` / `$BASE_BRANCH` / message-argument behavior rests on the earlier manual verification in the pilot workspace, not on a probe of this adapter's exact command | **Future security prerequisite**: run with explicit authorization before Stage 6 |
 | 15 | The lock probe takes a shared `flock` for an instant | `runs.probe_lock` | A coordinator trying its exclusive lock at that instant fails and refuses its dispatch | Nonblocking (safe direction) |
 | 16 | Linked-worktree and reftable checkouts unsupported; remote-tracking refs are only the last fetch | `gitstate` | Unsupported layouts make local facts UNKNOWN; stale remote-tracking refs can only add refusals (`REMOTE_TRACKING_BRANCH_EXISTS`) | Nonblocking hardening |
 | 17 | `archon-implement` opens no pull request | Archon workflow definition | A successful run normally ends as `NO_PR` with an unpushed branch | **Future design item** for Stage 6: decide how the PR is opened (reviewed workflow or human) |
+| 18 | The confined root is pinned once the walk reaches it; a directory replaced *before* the walk reaches it changes what the configured path names (F3 fixed: no resolve-then-open window remains) | `fsread.ConfinedTree.open` | Only a process that can write an ancestor of a configured path (`--checkout`, `--state-dir`, `--archon-home`) can choose which tree is read; it cannot redirect an acquisition in progress or a tree already open | Nonblocking hardening; use paths whose ancestors only the operator can write |
+| 19 | The CLI lock probe is an observation (F6 fixed) | `cli._preflight`, `runs.probe_lock` | The lock can be taken right after the probe; the early refusal avoids requests but proves nothing about later moments | **Future security prerequisite**: Stage 6 holds the exclusive lock across plan, preflight and Archon start |
+| 20 | GitHub matching-refs has no completeness signal; listings of 100+ refs for one task prefix are treated as incomplete (F2 fixed) | `reconcile.remote_branch_names` | A task with that many branches can never reconcile; fails closed | Nonblocking hardening |
+| 21 | Stage 2 collection now treats PR records with missing identity as incomplete (F2) | `collector.branch_pull_requests` | A PR from a deleted fork with the same head owner and branch makes that branch's facts UNKNOWN | Nonblocking (fails closed) |

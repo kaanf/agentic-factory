@@ -31,10 +31,10 @@ factory reconcile <project-dir> --task ID [--checkout DIR] (--live | --offline)
 
 | Exit | `preflight` | `reconcile` |
 |---|---|---|
-| 0 | every dry-run check passed. **Not an authorization**: `authorization.granted` is always false | reconciled; every fact needed was read (any state) |
+| 0 | every dry-run check passed. Unreachable in this version: the effective Archon provider is never established (`ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED`), so the best result is UNKNOWN (exit 1). Even a PASS would not be an authorization | reconciled; every fact needed was read (any state) |
 | 1 | the dry run did not pass (a check is FAIL or UNKNOWN) | – |
 | 2 | invalid project or snapshot | invalid project |
-| 3 | another coordinator holds the dispatch lock (refused at once), or a live collection was incomplete | a fact was UNKNOWN, or the lock is held |
+| 3 | another coordinator holds the dispatch lock (refused before any evidence is collected or any request is made), or a live collection was incomplete | a fact was UNKNOWN, or the lock is held |
 | 64 | usage error (including any unknown option such as `--execute`) | usage error, or unknown task |
 | 70 | internal error | internal error |
 
@@ -83,10 +83,26 @@ Fixed in code (`factory/archon.py`); a manifest can only narrow it.
   `archon-worktree-cleanup`, and any name containing one of the words merge, queue, deploy, release,
   ship, publish, intake, trigger, serve, cleanup, delete. A manifest that allows one fails validation,
   and the preflight and the builder refuse it again independently.
-- **Providers**: Archon 0.14.0 offers no verified per-run provider selection (`workflow run` has
-  `--model` bindings and `--config` layers; their effect on the provider is unverified). The task's
-  provider must therefore map to Archon's configured `defaultAssistant`; otherwise
-  `PROVIDER_NOT_ARCHON_DEFAULT`. The builder never emits a provider or model option.
+- **Providers**: Archon 0.14.0 has no per-run provider option, and the provider a run uses is
+  composed in layers (read from the Archon 0.14.0 binary's configuration code):
+  1. the global `~/.archon/config.yaml` `defaultAssistant`;
+  2. a repository `.archon/config.yaml` `assistant`, which overrides it;
+  3. tier (`small`, `medium`, `large`) and `@alias` bindings from both files, each naming its own
+     provider; `archon-implement` resolves `['@implementer', large]`;
+  4. per-user AI preferences (whose `defaultProvider` outranks the repository assistant) and
+     per-codebase settings, both held in Archon's database;
+  5. run layers (`--model`, `--config`), which the builder never emits.
+
+  Preflight checks layers 1-3 in every file Archon may read (the checkout's and, with `--live`, the
+  integration branch's repository config): the repository assistant, else the global default, must
+  be the task's assistant (`PROVIDER_OVERRIDDEN_BY_REPOSITORY`, `PROVIDER_NOT_ARCHON_DEFAULT`), both
+  copies must agree (`ARCHON_REPO_CONFIG_CONFLICT`), and every tier and alias binding in every file
+  must name it (`MODEL_BINDING_PROVIDER_MISMATCH`); bindings in forms whose provider is not
+  evaluated (string specs, alias indirection) are refused (`MODEL_BINDING_UNSUPPORTED`). A workflow
+  file in the checkout's `.archon/workflows` or Archon's home `workflows`/`plugins` that defines the
+  selected workflow could replace the reviewed bundled definition (`WORKFLOW_OVERRIDE_PRESENT`).
+  Layer 4 cannot be read, so `ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED` (UNKNOWN) is always
+  reported: **the effective provider is never established and no preflight passes in Stage 5.**
 
 ## The command
 
@@ -126,11 +142,28 @@ any is unknown, else PASS. Every applicable reason is reported.
 | Task | `TASK_NOT_FOUND`, `TASK_REVISION_MISMATCH` (no command is built), `TASK_TEXT_UNSAFE`, `TASK_READY` (PASS, advisory), `TASK_NOT_READY` (FAIL, or UNKNOWN when the plan state is UNKNOWN), `TASK_READINESS_UNKNOWN` |
 | Branches | `INTEGRATION_BRANCH_UNSAFE`, `FEATURE_BRANCH_UNSAFE`, `FEATURE_BRANCH_PROTECTED_NAME`, `BASE_IS_RELEASE_BRANCH` |
 | Workflow | `WORKFLOW_NOT_CONFIGURED`, `WORKFLOW_INVALID`, `WORKFLOW_FORBIDDEN`, `WORKFLOW_NOT_ALLOWED`, `WORKFLOW_NOT_SUPPORTED` |
-| Provider | `PROVIDER_NOT_CONFIGURED`, `PROVIDER_INVALID`, `PROVIDER_NOT_AVAILABLE`, `PROVIDER_ASSISTANT_INVALID`, `PROVIDER_NOT_ARCHON_DEFAULT`, `ARCHON_DEFAULT_ASSISTANT_UNKNOWN` |
+| Provider | `PROVIDER_NOT_CONFIGURED`, `PROVIDER_INVALID`, `PROVIDER_NOT_AVAILABLE`, `PROVIDER_ASSISTANT_INVALID`, `PROVIDER_NOT_ARCHON_DEFAULT`, `PROVIDER_OVERRIDDEN_BY_REPOSITORY`, `ARCHON_REPO_CONFIG_CONFLICT`, `ARCHON_ASSISTANT_INVALID`, `ARCHON_DEFAULT_ASSISTANT_UNKNOWN`, `MODEL_BINDING_PROVIDER_MISMATCH`, `MODEL_BINDING_UNSUPPORTED`, `MODEL_BINDING_INVALID`, `ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED` (always, UNKNOWN) |
+| Workflow definitions | `WORKFLOW_OVERRIDE_PRESENT`, `ARCHON_WORKFLOW_DEFINITIONS_UNREADABLE` |
 | Archon version | `ARCHON_VERSION_NOT_CONFIGURED`, `ARCHON_VERSION_UNSUPPORTED` (pin outside the adapter's verified set), `ARCHON_VERSION_UNKNOWN`, `ARCHON_HOME_UNREADABLE`, `ARCHON_VERSION_MISMATCH` |
-| Checkout | `NOT_A_CHECKOUT`, `CHECKOUT_UNREADABLE`, `CHECKOUT_UNSAFE`, `CHECKOUT_LAYOUT_UNSUPPORTED`, `GIT_METADATA_INVALID`, `GIT_METADATA_UNREADABLE`, `GIT_METADATA_TOO_LARGE`, `CHECKOUT_REMOTE_UNKNOWN`, `CHECKOUT_REPOSITORY_MISMATCH`, `CHECKOUT_ON_FEATURE_BRANCH` |
+| Checkout | `NOT_A_CHECKOUT`, `CHECKOUT_UNREADABLE`, `CHECKOUT_UNSAFE`, `CHECKOUT_LAYOUT_UNSUPPORTED`, `GIT_METADATA_INVALID`, `GIT_METADATA_UNREADABLE`, `GIT_METADATA_TOO_LARGE`, `CHECKOUT_REMOTE_UNKNOWN`, `CHECKOUT_REPOSITORY_MISMATCH`, `CHECKOUT_ON_FEATURE_BRANCH`, `CHECKOUT_HEAD_UNKNOWN` |
 | Archon repository config | `ARCHON_REPO_CONFIG_MISSING`, `ARCHON_REPO_CONFIG_INVALID`, `ARCHON_REPO_CONFIG_UNSAFE`, `ARCHON_REPO_CONFIG_UNREADABLE`, `ARCHON_BASE_BRANCH_UNSET`, `ARCHON_BASE_BRANCH_MISMATCH`, and the same with `ARCHON_REMOTE_` for the integration branch on GitHub; `ARCHON_REMOTE_CONFIG_UNCHECKED` offline |
-| Branch state | `FEATURE_BRANCH_EXISTS_LOCAL`, `FEATURE_WORKTREE_EXISTS`, `REMOTE_TRACKING_BRANCH_EXISTS`, `FEATURE_BRANCH_EXISTS_REMOTE`, `REMOTE_BRANCH_UNKNOWN`, `REMOTE_BRANCH_UNCHECKED` |
+| Branch state | `FEATURE_BRANCH_EXISTS_LOCAL`, `LOCAL_REF_UNRESOLVED`, `FEATURE_BRANCH_LOCAL_UNKNOWN`, `FEATURE_WORKTREE_EXISTS`, `FEATURE_WORKTREE_UNKNOWN`, `REMOTE_TRACKING_BRANCH_EXISTS`, `REMOTE_TRACKING_UNKNOWN`, `FEATURE_BRANCH_EXISTS_REMOTE`, `REMOTE_BRANCH_UNKNOWN`, `REMOTE_BRANCH_UNCHECKED` |
+
+Local branch facts are tri-state: `present`, `absent` or `unknown`, and only a confirmed absence
+passes. A ref entry that exists but cannot be resolved (symbolic ref, symbolic link, malformed or
+unreadable value) is present and unresolved; symbolic refs are never followed. A ref directory that
+cannot be listed, or a link where a directory could be, makes every name below it unknown. A linked
+worktree whose `HEAD` cannot be read or understood makes the worktree question unknown for every
+branch. Unresolved entries that concern the task's branches (any revision in the history window, or
+a symbolic ref pointing at one) make reconciliation UNCERTAIN; broken refs unrelated to the task are
+reported as notes.
+
+GitHub listings are validated the same way. A pull request is skipped only when it is confirmed to
+be about something else (a head ref naming another branch, or a head repository naming another
+repository); one whose number, head ref, head repository, base, state or merge state is missing or
+malformed makes the whole listing incomplete, so the result is UNKNOWN. A matching-refs entry
+without a `refs/heads/` name inside the requested prefix and an object id, or a listing of 100 or
+more entries (the endpoint gives no completeness signal), is incomplete, never an empty result.
 | Reconciliation | `RECONCILE_<STATE>` for every state other than `NO_RUN` (UNKNOWN for `UNKNOWN`, FAIL otherwise) |
 | Command | `COMMAND_BUILT` (PASS), or the builder's code: `TASK_ID_UNSAFE`, `FEATURE_BRANCH_UNSAFE`, `INTEGRATION_BRANCH_UNSAFE`, `BRANCH_CONFLICT`, `WORKFLOW_FORBIDDEN`, `CHECKOUT_PATH_UNSAFE`, `UNSAFE_TEXT`, `PROMPT_TOO_LARGE` |
 | Inputs | `INPUT_CHANGED_DURING_PREFLIGHT`: manifest or task file hash changed while preflight ran |
@@ -185,6 +218,12 @@ The lock is probed with a shared, non-blocking `flock` that is released at once;
 read-only and never created. A probe at the same instant as a coordinator's exclusive attempt can
 make that coordinator refuse, which is the safe direction.
 
+`factory preflight` probes the lock before anything else, including `--live` evidence collection,
+and refuses with exit 3 and no GitHub request when it is held; `preflight()` probes it again itself.
+This is a Stage 5 observation, **not** Stage 6 exclusive dispatch locking: the lock can be taken or
+released immediately after the probe, so the early check avoids wasted reads and requests but proves
+nothing about any later moment.
+
 **The reader is not the ledger.** Exclusive locking, atomic intent creation and atomic outcome
 publication are Stage 6 obligations. Nothing in Stage 5 writes a record.
 
@@ -236,7 +275,8 @@ actions above are manual.
 | GitHub read-only | existing GET-only transport; reconcile requests only `repos/<owner>/<repo>/...` | request log assertions |
 | No execution surface | CLI has no execute, dispatch, run, adopt, abandon, retry, merge, push, delete, force or yes options or commands | parser walk; `--execute` exits 64 |
 | Untrusted strings are data | full-match validators (`refs.py`), argv not shell, display round-trip, control and bidi characters refused | adversarial tests: `$(...)`, backticks, `;`, option-like text, trailing newlines that pass JSON Schema |
-| Filesystem confinement | `fsread.ConfinedTree`: descriptor-relative, per-component `O_NOFOLLOW`, regular files, bounded size, optional single link, `O_NONBLOCK` against FIFOs | symlink, hard-link, FIFO, traversal and size tests |
+| Filesystem confinement | `fsread.ConfinedTree`: the root is acquired by a descriptor-relative walk from `/` (symbolic links in the root's own path resolved with `readlinkat` from the descriptor holding them; no resolve-then-open), then per-component `O_NOFOLLOW` below it, regular files, bounded size, optional single link, `O_NONBLOCK` against FIFOs | directory replacement injected between acquisition steps (ancestor, parent, root, nested), symlink, hard-link, FIFO, traversal and size tests |
+| Bounded work | history window computed before allocation; only existing remote revisions are stored | revisions 1 to 1,000,000: bounded entries, requests and memory |
 | TOCTOU between validation and command | command built from the in-memory project the checks used; manifest and task re-hashed at the end; hashes and command digest in the report | file changed mid-preflight → `INPUT_CHANGED_DURING_PREFLIGHT` |
 | Evidence trust | authorization structurally never granted | simulated READY, every provenance, `dispatch.enabled` bypass |
 
@@ -244,6 +284,12 @@ actions above are manual.
 
 - **Observations are a snapshot.** Nothing here holds a lock while reading, and reading several files
   or API responses is not atomic. Every result is advisory; Stage 6 must recheck under its lock.
+- **The effective provider is not established.** Archon's database-held layers (per-user AI
+  preferences, per-codebase settings) can change it and are not readable; every preflight is
+  therefore at best UNKNOWN.
+- **The root path itself is configuration.** `ConfinedTree` pins the tree once its walk reaches it;
+  a directory replaced *before* the walk reaches it simply changes what the configured path names.
+  Use paths whose ancestors only you can write.
 - **Archon facts are recorded claims.** The installed version comes from `install.json`, not from
   running the binary, and the default assistant from `config.yaml`. A replaced binary or edited file
   is not detected. Stage 6 must check `archon --version` (and preferably a binary hash) at action time.
@@ -271,6 +317,8 @@ Human prerequisites, outside Factory Core (4B §10):
 Factory Core obligations for Stage 6, derived from Stage 5: exclusive `flock` on `dispatch.lock`
 held across plan, preflight and Archon start; intent with `O_CREAT|O_EXCL` and fsync; outcome via
 temporary file, fsync and rename; action-time revalidation of heads, approvals, input hashes,
-command digest and the Archon binary; refusal when the agent environment's GitHub identity is an
+command digest and the Archon binary; establishing the effective Archon provider including its
+database-held layers (a documented read interface, or per-user preferences provably disabled for the
+agent OS user); refusal when the agent environment's GitHub identity is an
 approver; `dispatch.enabled` set only by a human-merged PR; the probe procedure passed for the pinned
 Archon version in every repository.

@@ -166,6 +166,8 @@ class ArchonInstall:
     default_assistant: str | None
     version_problem: Finding | None
     assistant_problem: Finding | None
+    # The parsed global configuration document, when it could be read; used for model bindings.
+    config: Any = None
 
 
 def _read_json(tree: ConfinedTree, *parts: str) -> Any:
@@ -176,6 +178,7 @@ def read_archon_home(home: Path) -> ArchonInstall:
     """Read ``install.json`` (version) and ``config.yaml`` (default assistant) from Archon's home."""
     version: str | None = None
     assistant: str | None = None
+    config: Any = None
     version_problem: Finding | None = None
     assistant_problem: Finding | None = None
     try:
@@ -196,36 +199,242 @@ def read_archon_home(home: Path) -> ArchonInstall:
         try:
             config = parse_yaml(tree.read("config.yaml", max_bytes=_SMALL_FILE).decode("utf-8"))
             value = config.get("defaultAssistant") if isinstance(config, dict) else None
+            if value is not None and not is_name(value):
+                assistant_problem = _fail(
+                    "ARCHON_ASSISTANT_INVALID", f"global defaultAssistant {value!r} is not a name"
+                )
             if is_name(value):
                 assistant = value
-            else:
+            elif assistant_problem is None:
                 assistant_problem = _unknown(
                     "ARCHON_DEFAULT_ASSISTANT_UNKNOWN", "Archon's config.yaml has no valid 'defaultAssistant'"
                 )
         except (FsError, DocumentError, UnicodeDecodeError) as exc:
             assistant_problem = _unknown("ARCHON_DEFAULT_ASSISTANT_UNKNOWN", f"Archon config: {_message(exc)}")
-    return ArchonInstall(version, assistant, version_problem, assistant_problem)
+    return ArchonInstall(version, assistant, version_problem, assistant_problem, config)
 
 
 def _message(exc: Exception) -> str:
     return getattr(exc, "message", None) or str(exc)
 
 
-def check_assistant(assistant: str | None, install: ArchonInstall) -> list[Finding]:
+# The model chain of each supported workflow, from its bundled Archon 0.14.0 definition
+# (`model: ['@implementer', large]`). Archon binds tiers and @aliases to a provider and a model.
+WORKFLOW_MODEL_CHAINS: dict[str, tuple[str, ...]] = {"archon-implement": ("@implementer", "large")}
+_TIERS = frozenset({"small", "medium", "large"})
+
+
+def _bindings(document: Any, where: str) -> tuple[dict[str, str], list[Finding]]:
+    """Tier and alias bindings of one Archon configuration document: name -> provider.
+
+    Only the mapping form ``{provider: <name>, model: <model>}`` is accepted; Archon also resolves
+    string specs and alias indirection, whose provider this adapter does not evaluate, so they are
+    refused as unsupported.
+    """
+    bindings: dict[str, str] = {}
+    findings: list[Finding] = []
+    if not isinstance(document, dict):
+        return bindings, findings
+    for section, valid in (("tiers", lambda k: k in _TIERS), ("aliases", lambda k: k.startswith("@"))):
+        entries = document.get(section)
+        if entries is None:
+            continue
+        if not isinstance(entries, dict):
+            findings.append(_fail("MODEL_BINDING_INVALID", f"{where} '{section}' is not a mapping"))
+            continue
+        for name, binding in entries.items():
+            label = f"{where} {section}.{name}"
+            if not isinstance(name, str) or not valid(name):
+                findings.append(_fail("MODEL_BINDING_INVALID", f"{label}: not a valid {section[:-1]} name"))
+                continue
+            provider = binding.get("provider") if isinstance(binding, dict) else None
+            model = binding.get("model") if isinstance(binding, dict) else None
+            if not is_name(provider) or not isinstance(model, str) or not model.strip():
+                findings.append(
+                    _fail(
+                        "MODEL_BINDING_UNSUPPORTED",
+                        f"{label}: only {{provider, model}} bindings can be checked; its provider is not established",
+                    )
+                )
+                continue
+            bindings[f"{section}.{name}"] = provider
+    return bindings, findings
+
+
+def check_effective_provider(
+    assistant: str | None, install: ArchonInstall, repo_configs: list[tuple[str, str | None]]
+) -> list[Finding]:
+    """Whether Archon's configuration files make ``assistant`` the provider every run would use.
+
+    Archon 0.14.0 applies, in order: the global ``defaultAssistant``, a repository ``assistant``
+    (which overrides it), then tier and @alias bindings from both files, each naming its own
+    provider. ``repo_configs`` are the repository configuration texts Archon may read (the local
+    checkout's and the integration branch's), as ``(where, text)``; a text that could not be read
+    is None and already reported elsewhere. Every binding in every layer must name ``assistant``:
+    which bindings a workflow's nodes use is not evaluated, so none may differ.
+
+    Archon also composes the run's AI configuration from layers held in its database (per-user AI
+    preferences, which outrank the repository assistant, and per-codebase environment). Those are
+    not readable, so the effective provider is never established: ``ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED``
+    is always reported and keeps the dry run from passing.
+    """
     if assistant is None:
         return []
-    if install.assistant_problem is not None:
-        return [install.assistant_problem]
-    if install.default_assistant != assistant:
-        return [
-            _fail(
-                "PROVIDER_NOT_ARCHON_DEFAULT",
-                f"the task needs Archon assistant '{assistant}', but Archon's default is "
-                f"'{install.default_assistant}' and per-run provider selection is not verified",
-                assistant,
+    findings: list[Finding] = []
+    repo_assistants: dict[str, str] = {}
+    layers: list[tuple[str, Any]] = [("global ~/.archon/config.yaml", install.config)]
+    for where, text in repo_configs:
+        if text is None:
+            continue
+        try:
+            document = parse_yaml(text)
+        except DocumentError as exc:
+            findings.append(_fail("ARCHON_REPO_CONFIG_INVALID", f"{where} .archon/config.yaml: {exc.message}"))
+            continue
+        layers.append((f"{where} .archon/config.yaml", document))
+        value = document.get("assistant") if isinstance(document, dict) else None
+        if value is not None:
+            if not is_name(value):
+                findings.append(
+                    _fail("ARCHON_ASSISTANT_INVALID", f"{where} repository assistant {value!r} is not a name")
+                )
+            else:
+                repo_assistants[where] = value
+
+    if len(set(repo_assistants.values())) > 1:
+        detail = ", ".join(f"{w}: {a}" for w, a in sorted(repo_assistants.items()))
+        findings.append(
+            _fail("ARCHON_REPO_CONFIG_CONFLICT", f"repository configurations name different assistants ({detail})")
+        )
+    for where, value in sorted(repo_assistants.items()):
+        if value != assistant:
+            findings.append(
+                _fail(
+                    "PROVIDER_OVERRIDDEN_BY_REPOSITORY",
+                    f"the {where} repository configuration sets assistant '{value}', overriding the task's '{assistant}'",
+                    assistant,
+                )
             )
-        ]
-    return []
+    if not repo_assistants:
+        if install.assistant_problem is not None:
+            findings.append(install.assistant_problem)
+        elif install.default_assistant != assistant:
+            findings.append(
+                _fail(
+                    "PROVIDER_NOT_ARCHON_DEFAULT",
+                    f"the task needs Archon assistant '{assistant}', but Archon's default is "
+                    f"'{install.default_assistant}' and per-run provider selection is not verified",
+                    assistant,
+                )
+            )
+    elif install.assistant_problem is not None and install.assistant_problem.result == "FAIL":
+        findings.append(install.assistant_problem)
+
+    for where, document in layers:
+        bindings, problems = _bindings(document, where)
+        findings.extend(problems)
+        for name, provider in sorted(bindings.items()):
+            if provider != assistant:
+                findings.append(
+                    _fail(
+                        "MODEL_BINDING_PROVIDER_MISMATCH",
+                        f"{where} binds {name} to provider '{provider}', not the task's '{assistant}'",
+                        name,
+                    )
+                )
+    findings.append(
+        _unknown(
+            "ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED",
+            "Archon also applies per-user AI preferences and per-codebase settings from its database, which "
+            "can change the provider; they are not readable, so the effective provider is not established",
+        )
+    )
+    return findings
+
+
+def check_assistant(assistant: str | None, install: ArchonInstall) -> list[Finding]:
+    """The global-only check, kept for callers without repository configuration (see ``check_effective_provider``)."""
+    return [
+        f
+        for f in check_effective_provider(assistant, install, [])
+        if f.code != "ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED"
+    ]
+
+
+_WORKFLOW_DIRS: tuple[tuple[str, ...], ...] = ((".archon", "workflows"),)
+_HOME_WORKFLOW_DIRS: tuple[tuple[str, ...], ...] = (("workflows",), ("plugins",))
+_MAX_WORKFLOW_ENTRIES = 500
+_MAX_WORKFLOW_DEPTH = 6
+
+
+def _scan_definitions(tree: ConfinedTree, base: tuple[str, ...], workflow: str, label: str) -> list[Finding]:
+    """FAIL for a definition named ``workflow`` below ``base``; UNKNOWN for anything unreadable."""
+    findings: list[Finding] = []
+    budget = [_MAX_WORKFLOW_ENTRIES]
+
+    def walk(parts: tuple[str, ...], depth: int) -> None:
+        try:
+            entries = tree.list(*parts)
+        except FsError as exc:
+            if exc.code != "NOT_FOUND" or parts != base:
+                findings.append(_unknown("ARCHON_WORKFLOW_DEFINITIONS_UNREADABLE", f"{label}: {exc.message}"))
+            return
+        for entry in entries:
+            budget[0] -= 1
+            if budget[0] < 0 or depth > _MAX_WORKFLOW_DEPTH:
+                findings.append(
+                    _unknown("ARCHON_WORKFLOW_DEFINITIONS_UNREADABLE", f"{label}: too many entries to examine")
+                )
+                return
+            path = "/".join((*parts, entry.name))
+            if entry.kind == "directory":
+                walk((*parts, entry.name), depth + 1)
+                continue
+            if not entry.name.endswith((".yaml", ".yml")):
+                continue
+            if entry.kind != "file":
+                findings.append(
+                    _unknown("ARCHON_WORKFLOW_DEFINITIONS_UNREADABLE", f"{label}: {path} is a {entry.kind}")
+                )
+                continue
+            stem = entry.name.rsplit(".", 1)[0]
+            try:
+                document = parse_yaml(tree.read(*parts, entry.name, max_bytes=_SMALL_FILE).decode("utf-8"))
+                name = document.get("name") if isinstance(document, dict) else None
+            except (FsError, DocumentError, UnicodeDecodeError) as exc:
+                if stem == workflow:
+                    findings.append(_fail("WORKFLOW_OVERRIDE_PRESENT", f"{label}: {path} may define '{workflow}'"))
+                else:
+                    findings.append(
+                        _unknown("ARCHON_WORKFLOW_DEFINITIONS_UNREADABLE", f"{label}: {path}: {_message(exc)}")
+                    )
+                continue
+            if name == workflow or stem == workflow:
+                findings.append(
+                    _fail(
+                        "WORKFLOW_OVERRIDE_PRESENT",
+                        f"{label}: {path} defines '{workflow}'; the reviewed bundled definition may not be the one run",
+                        workflow,
+                    )
+                )
+
+    walk(base, 0)
+    return findings
+
+
+def check_workflow_definitions(workflow: str | None, checkout: Path, home: Path) -> list[Finding]:
+    """Refuse when a repository or Archon-home workflow file could replace the reviewed bundled one."""
+    if workflow is None:
+        return []
+    findings: list[Finding] = []
+    for root, dirs, label in ((checkout, _WORKFLOW_DIRS, "checkout"), (home, _HOME_WORKFLOW_DIRS, "Archon home")):
+        try:
+            with ConfinedTree.open(root) as tree:
+                for base in dirs:
+                    findings.extend(_scan_definitions(tree, base, workflow, f"{label} {'/'.join(base)}"))
+        except FsError as exc:
+            findings.append(_unknown("ARCHON_WORKFLOW_DEFINITIONS_UNREADABLE", f"{label}: {exc.message}"))
+    return findings
 
 
 def check_repo_config(text: str | None, problem: FsError | None, integration: str, where: str) -> list[Finding]:

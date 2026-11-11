@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
-# Archon base-branch and worktree probe for Factory Core Stage 5 (bash-only; no coding agent).
+# Archon base-branch and worktree probe for Factory Core Stage 5. MANUAL AND OPT-IN.
 #
-# NOT run by the test suite or by Factory Core. A human runs it, once per repository, after reading
-# docs/probes/archon-probes.md and authorizing it explicitly. It refuses to start unless BOTH:
-#   - FACTORY_ARCHON_PROBE_AUTHORIZED is set to the exact checkout path, and
-#   - --i-have-read-docs-probes-archon-probes-md is passed.
+# This script is NOT part of Factory Core's dry-run interface: no `factory` command runs it, the test
+# suite only exercises its refusal paths, and it is disabled unless a human authorizes it. Unlike
+# `factory preflight`, it DOES execute things. Read docs/probes/archon-probes.md first.
 #
-# What it does in the given checkout:
-#   1. checks the installed Archon version and that the checkout is clean;
-#   2. writes ONE untracked workflow file, .archon/workflows/<probe>.yaml, containing only bash nodes;
-#   3. runs `archon workflow run <probe> --branch <unique probe branch> --base <integration>`;
-#   4. removes the workflow file again (also on failure).
-# The bash nodes only read: branch, merge base against the origin/* refs as last fetched (run
-# `git fetch` yourself first if they are stale), $BASE_BRANCH, remote branches. Nothing is pushed,
-# merged or deleted. Archon creates a worktree and a local probe branch; both are left in place and
-# the cleanup command is printed. Archon records the run in its own database (~/.archon).
+# What it can execute when authorized:
+#   - `archon --version`, then `archon workflow run <probe>` once: the Archon binary, its worktree
+#     creation, its run bookkeeping (~/.archon/archon.db) and whatever Archon does at run start,
+#     including resolving (not prompting) the configured AI provider;
+#   - the probe workflow's single bash node, which only reads git state and prints it;
+#   - git, read-only (status, rev-parse, merge-base, ls-remote).
+# What it refuses to run in: a checkout whose .archon/config.yaml sets worktree hooks or file copies
+# (postCreate, copyFiles, initSubmodules), environment, assistant, tier or alias overrides, or that
+# already has any workflow definitions; Archon would apply those to the probe run. It never runs a
+# workflow with prompt nodes. "Bash-only" limits what the probe workflow does, not what Archon does.
+#
+# Gates (all required): FACTORY_ARCHON_PROBE_AUTHORIZED=<exact checkout path>, the flag
+# --i-have-read-docs-probes-archon-probes-md, a clean checkout, the expected Archon version.
+#
+# Effects: one untracked .archon/workflows/<probe>.yaml (removed on exit), one local branch and
+# worktree created by Archon (left in place; cleanup command printed), one Archon run record, and a
+# log in /tmp. Nothing is pushed, fetched, merged or deleted.
 set -euo pipefail
 
 usage() {
@@ -48,12 +55,21 @@ done
 if [ "$integration" = "$release" ]; then echo "refused: integration and release must differ" >&2; exit 2; fi
 
 cd "$checkout"
+if [ -n "$(git --no-optional-locks status --porcelain)" ]; then echo "refused: the checkout has uncommitted changes" >&2; exit 2; fi
+if [ -f .archon/config.yaml ] && grep -Eq '^[[:space:]]*(postCreate|postCreateTimeout|copyFiles|initSubmodules|env|assistant|assistants|tiers|aliases|workflows|defaults|commands)[[:space:]]*:' .archon/config.yaml; then
+  echo "refused: .archon/config.yaml sets hooks, environment or AI overrides that Archon would apply to the probe" >&2
+  exit 2
+fi
+if [ -L .archon ] || [ -L .archon/workflows ] || { [ -d .archon/workflows ] && [ -n "$(ls -A .archon/workflows)" ]; }; then
+  echo "refused: .archon/workflows already has definitions (or is a link); the probe must run alone" >&2
+  exit 2
+fi
+
+# Archon runs only after every static refusal above has passed.
 installed="$(archon --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)"
 if [ "$installed" != "$expected" ]; then
   echo "refused: archon reports '${installed:-nothing}', expected $expected" >&2; exit 2
 fi
-if [ -n "$(git status --porcelain)" ]; then echo "refused: the checkout has uncommitted changes" >&2; exit 2; fi
-
 stamp="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 probe="factory-probe-$stamp"
 probe_branch="factory-probe/$stamp"

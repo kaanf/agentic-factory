@@ -32,12 +32,20 @@ from factory import archon
 from factory.archon import ArchonCommand, CommandError
 from factory.documents import sha256_file
 from factory.fsread import FsError
-from factory.github import GitHubApi, GitHubError, path_of
-from factory.gitstate import CheckoutState
+from factory.github import GitHubApi, GitHubError
+from factory.gitstate import ABSENT, PRESENT, CheckoutState
 from factory.model import Project, Task
 from factory.planning import Plan, Result, State, combine, task_branch
 from factory.project import MANIFEST_PATH
-from factory.reconcile import Reconciliation, decide, held, observe, read_local, reconcile_document
+from factory.reconcile import (
+    Reconciliation,
+    decide,
+    held,
+    observe,
+    read_local,
+    reconcile_document,
+    remote_branch_names,
+)
 from factory.reconcile import State as RunState
 from factory.refs import is_command_branch, unsafe_text
 from factory.runs import probe_lock
@@ -213,34 +221,56 @@ def _branch_checks(project: Project, task: Task, branch: str) -> list[Check]:
 
 
 def _checkout_checks(checkout: CheckoutState | None, branch: str) -> list[Check]:
+    """Local branch state. Only a confirmed absence passes; unknown is UNKNOWN, never omitted."""
     if checkout is None:
         return []
     checks = []
-    if checkout.head_branch == branch:
+    if not checkout.head_known:
+        checks.append(Check("CHECKOUT_HEAD_UNKNOWN", Result.UNKNOWN, "the checkout's HEAD could not be understood"))
+    elif checkout.head_branch == branch:
         checks.append(_fail("CHECKOUT_ON_FEATURE_BRANCH", f"the checkout has {branch} checked out", branch))
-    if branch in checkout.branches:
-        checks.append(_fail("FEATURE_BRANCH_EXISTS_LOCAL", f"{branch} already exists locally", branch))
-    if checkout.worktrees_on(branch):
-        checks.append(_fail("FEATURE_WORKTREE_EXISTS", f"a worktree already has {branch} checked out", branch))
-    for remote, branches in checkout.remote_branches.items():
-        if branch in branches:
+    observed = [
+        (
+            checkout.branch_state(branch),
+            "FEATURE_BRANCH_EXISTS_LOCAL",
+            "FEATURE_BRANCH_LOCAL_UNKNOWN",
+            "a local branch",
+        ),
+        (checkout.worktree_state(branch), "FEATURE_WORKTREE_EXISTS", "FEATURE_WORKTREE_UNKNOWN", "a worktree"),
+        (
+            checkout.remote_tracking_state(branch),
+            "REMOTE_TRACKING_BRANCH_EXISTS",
+            "REMOTE_TRACKING_UNKNOWN",
+            "a remote-tracking ref in the checkout's last fetch",
+        ),
+    ]
+    for state, present_code, unknown_code, what in observed:
+        if state == PRESENT:
+            checks.append(_fail(present_code, f"{branch} already exists as {what}", branch))
+        elif state != ABSENT:
             checks.append(
-                _fail("REMOTE_TRACKING_BRANCH_EXISTS", f"{remote}/{branch} exists in the checkout's last fetch", branch)
+                Check(
+                    unknown_code, Result.UNKNOWN, f"whether {branch} exists as {what} could not be established", branch
+                )
             )
+    why = checkout.local.unresolved.get(branch)
+    if why is not None:
+        checks.append(_fail("LOCAL_REF_UNRESOLVED", f"local ref {branch} {why}", branch))
     return checks
 
 
-def _remote_config(api: GitHubApi | None, project: Project, task: Task) -> list[Check]:
+def _remote_config(api: GitHubApi | None, project: Project, task: Task) -> tuple[list[Check], str | None]:
+    """Checks of the integration branch's ``.archon/config.yaml``, and its text when it was read."""
     repo = project.manifest.repository(task.repository)
     assert repo is not None
     if api is None:
-        return [
-            Check(
-                "ARCHON_REMOTE_CONFIG_UNCHECKED",
-                Result.UNKNOWN,
-                "offline: .archon/config.yaml on the remote integration branch was not read",
-            )
-        ]
+        unchecked = Check(
+            "ARCHON_REMOTE_CONFIG_UNCHECKED",
+            Result.UNKNOWN,
+            "offline: .archon/config.yaml on the remote integration branch was not read",
+        )
+        return [unchecked], None
+    text: str | None
     try:
         body = api.get(f"repos/{repo.github}/contents/.archon/config.yaml", ref=repo.integration_branch)
         if not isinstance(body, dict) or body.get("type") != "file" or body.get("encoding") != "base64":
@@ -252,7 +282,8 @@ def _remote_config(api: GitHubApi | None, project: Project, task: Task) -> list[
         problem = FsError("NOT_FOUND" if exc.status == 404 else "UNREADABLE", exc.message)
     except (KeyError, TypeError, binascii.Error, UnicodeDecodeError) as exc:
         text, problem = None, FsError("UNREADABLE", f"unreadable contents response: {exc}")
-    return [_from(f) for f in archon.check_repo_config(text, problem, repo.integration_branch, "remote")]
+    checks = [_from(f) for f in archon.check_repo_config(text, problem, repo.integration_branch, "remote")]
+    return checks, text
 
 
 def _remote_branch(api: GitHubApi | None, project: Project, task: Task, branch: str) -> list[Check]:
@@ -263,12 +294,10 @@ def _remote_branch(api: GitHubApi | None, project: Project, task: Task, branch: 
             Check("REMOTE_BRANCH_UNCHECKED", Result.UNKNOWN, f"offline: whether {branch} exists on GitHub is unknown")
         ]
     try:
-        refs = api.get(f"repos/{repo.github}/git/matching-refs/heads/{path_of(branch)}")
-        if not isinstance(refs, list):
-            raise GitHubError("expected a list of refs")
+        names = remote_branch_names(api, repo, branch)
     except GitHubError as exc:
         return [Check("REMOTE_BRANCH_UNKNOWN", Result.UNKNOWN, f"{branch} on GitHub: {exc.message}", branch)]
-    if any(isinstance(r, dict) and r.get("ref") == f"refs/heads/{branch}" for r in refs):
+    if branch in names:
         return [_fail("FEATURE_BRANCH_EXISTS_REMOTE", f"{branch} already exists on GitHub", branch)]
     return []
 
@@ -304,6 +333,41 @@ def _reread(project: Project, task: Task | None) -> list[Check]:
     return []
 
 
+def lock_refusal(project: Project, task_id: str, plan: Plan | None) -> Preflight:
+    """The report for a preflight refused because another coordinator holds the dispatch lock.
+
+    Built from the validated project alone: nothing else is read and nothing is requested. The lock
+    probe that leads here is a Stage 5 observation, not Stage 6 exclusive locking: the lock can be
+    taken or released right after it, so this narrows wasted work and requests but proves nothing
+    about the moment of any later action.
+    """
+    task = project.tasks.get(task_id)
+    if task is None:
+        held_check = Check(
+            "RECONCILE_COORDINATOR_ACTIVE",
+            Result.FAIL,
+            "another coordinator holds the dispatch lock; nothing was evaluated",
+        )
+        return Preflight(
+            project, None, (held_check,), None, authorization(project, plan), None, plan, _digests(project, None), True
+        )
+    repo = project.manifest.repository(task.repository)
+    assert repo is not None
+    observations = held(project, task)
+    result = decide(observations)
+    return Preflight(
+        project,
+        task,
+        tuple(_reconcile_check(result)),
+        None,
+        authorization(project, plan),
+        reconcile_document(task, repo, result, observations),
+        plan,
+        _digests(project, task),
+        lock_held=True,
+    )
+
+
 def preflight(
     project: Project,
     task_id: str,
@@ -322,20 +386,7 @@ def preflight(
     repo = project.manifest.repository(task.repository)
     assert repo is not None
     if probe_lock(state_root, project.manifest.project_id) == "held":
-        # A second coordinator refuses at once: nothing else is read and nothing is requested.
-        observations = held(project, task)
-        result = decide(observations)
-        return Preflight(
-            project,
-            task,
-            tuple(_reconcile_check(result)),
-            None,
-            authorization(project, plan),
-            reconcile_document(task, repo, result, observations),
-            plan,
-            _digests(project, task),
-            lock_held=True,
-        )
+        return lock_refusal(project, task_id, plan)
     checks: list[Check] = []
     if task.revision != revision:
         checks.append(
@@ -352,7 +403,6 @@ def preflight(
     checks.extend(_from(f) for f in findings)
     install = archon.read_archon_home(archon_home)
     checks.extend(_from(f) for f in archon.check_archon_version(dispatch, install.version, install.version_problem))
-    checks.extend(_from(f) for f in archon.check_assistant(assistant, install))
 
     local, local_findings = read_local(checkout, repo)
     checks.extend(Check(f.code, Result.UNKNOWN if f.result == "UNKNOWN" else Result.FAIL, f.message, f.ref)
@@ -360,7 +410,11 @@ def preflight(
     checks.extend(_checkout_checks(local, branch))
     text, problem = archon.read_local_repo_config(checkout)
     checks.extend(_from(f) for f in archon.check_repo_config(text, problem, repo.integration_branch, "local"))
-    checks.extend(_remote_config(api, project, task))
+    remote_checks, remote_text = _remote_config(api, project, task)
+    checks.extend(remote_checks)
+    repo_configs = [("local", text), ("integration branch", remote_text)]
+    checks.extend(_from(f) for f in archon.check_effective_provider(assistant, install, repo_configs))
+    checks.extend(_from(f) for f in archon.check_workflow_definitions(workflow, checkout, archon_home))
     checks.extend(_remote_branch(api, project, task, branch))
 
     observations = observe(project, task, checkout, state_root, api, local, local_findings)

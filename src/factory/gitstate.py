@@ -5,6 +5,13 @@ inside the checkout is followed: local branches (loose refs and ``packed-refs``)
 branches, the checked-out branch, linked worktrees (``.git/worktrees/*``), and the ``origin``
 remote URL from ``.git/config``.
 
+Absence is a confirmed fact, never a default. Every ref entry that exists but cannot be resolved (a
+symbolic ref, a symbolic link, a malformed or unreadable value) is kept as *present but unresolved*;
+a ref directory that cannot be listed makes every name below it *unknown*; a linked worktree whose
+``HEAD`` cannot be read makes "is this branch checked out?" unknown. Symbolic refs are never
+followed. ``CheckoutState.branch_state`` and its siblings answer ``present``, ``absent`` or
+``unknown``; only ``absent`` means the name was looked for and is not there.
+
 Supported layout: a non-bare checkout whose ``.git`` is a directory using the files ref backend.
 A checkout whose ``.git`` is a file (a linked worktree or submodule), or that uses the reftable
 backend, is reported as unsupported and every fact about it is unknown. Remote-tracking branches
@@ -35,25 +42,97 @@ class GitStateError(Exception):
         self.message = message
 
 
+PRESENT = "present"
+ABSENT = "absent"
+UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True)
 class Worktree:
-    """A linked worktree. ``path`` is where git records it; it is reported, never opened."""
+    """A linked worktree. ``path`` is where git records it; it is reported, never opened.
+
+    ``state`` is ``branch`` (``branch`` is set), ``detached`` or ``unknown`` (its HEAD could not be
+    read or understood, so it may have any branch checked out).
+    """
 
     id: str
     path: str | None
     branch: str | None
+    state: str = "branch"
+
+
+def _covers(prefix: str, name: str) -> bool:
+    return prefix == "" or name == prefix or name.startswith(prefix + "/")
+
+
+@dataclass
+class RefSet:
+    """Refs of one namespace (``refs/heads`` or ``refs/remotes``), named relative to it.
+
+    ``unresolved`` maps names that exist but whose target could not be established to the reason.
+    ``unknown`` lists subtrees that could not be listed ("" for the whole namespace).
+    """
+
+    resolved: dict[str, str] = field(default_factory=dict)
+    unresolved: dict[str, str] = field(default_factory=dict)
+    unknown: tuple[str, ...] = ()
+
+    def state(self, name: str) -> str:
+        if name in self.resolved or name in self.unresolved:
+            return PRESENT
+        if any(_covers(prefix, name) for prefix in self.unknown):
+            return UNKNOWN
+        return ABSENT
+
+    def names(self) -> list[str]:
+        return sorted({*self.resolved, *self.unresolved})
 
 
 @dataclass(frozen=True)
 class CheckoutState:
     path: str
     head_branch: str | None
-    branches: dict[str, str]
-    remote_branches: dict[str, dict[str, str]]
+    local: RefSet
+    remote: RefSet
     worktrees: tuple[Worktree, ...]
     origin_url: str | None
-    # Problems that did not prevent reading, e.g. a ref that is a symbolic link (it is left out).
+    # False when HEAD exists but is neither a branch reference nor an object id.
+    head_known: bool = True
+    # Human-readable notes about everything that could not be resolved.
     problems: tuple[str, ...] = field(default_factory=tuple)
+
+    @property
+    def branches(self) -> dict[str, str]:
+        """Local branches whose target is known (resolved refs only)."""
+        return self.local.resolved
+
+    @property
+    def remote_branches(self) -> dict[str, dict[str, str]]:
+        found: dict[str, dict[str, str]] = {}
+        for name, sha in self.remote.resolved.items():
+            remote, _, branch = name.partition("/")
+            found.setdefault(remote, {})[branch] = sha
+        return found
+
+    def branch_state(self, branch: str) -> str:
+        return self.local.state(branch)
+
+    def remote_tracking_state(self, branch: str) -> str:
+        """Whether any remote-tracking ref ``<remote>/<branch>`` exists in the last fetch."""
+        if any(name.partition("/")[2] == branch for name in self.remote.names()):
+            return PRESENT
+        for prefix in self.remote.unknown:
+            remote = prefix.split("/")[0]
+            if prefix == "" or _covers(prefix, f"{remote}/{branch}"):
+                return UNKNOWN
+        return ABSENT
+
+    def worktree_state(self, branch: str) -> str:
+        if any(w.branch == branch for w in self.worktrees):
+            return PRESENT
+        if any(w.state == UNKNOWN for w in self.worktrees):
+            return UNKNOWN
+        return ABSENT
 
     def worktrees_on(self, branch: str) -> list[Worktree]:
         return [w for w in self.worktrees if w.branch == branch]
@@ -75,41 +154,66 @@ def _symref(content: str) -> str | None:
     return None
 
 
+def _head(content: str) -> tuple[str, str | None]:
+    """Classify a HEAD file: (``branch``, name), (``detached``, None) or (``unknown``, None)."""
+    branch = _symref(content)
+    if branch is not None:
+        return "branch", branch
+    if is_object_id(content.strip()) and content.strip() + "\n" in (content, content + "\n"):
+        return "detached", None
+    return UNKNOWN, None
+
+
 class _Reader:
     def __init__(self, tree: ConfinedTree) -> None:
         self.tree = tree
         self.problems: list[str] = []
         self.count = 0
 
-    def loose(self, base: tuple[str, ...], prefix: str = "") -> dict[str, str]:
-        """Loose refs below ``base`` (e.g. ``.git/refs/heads``), keyed by name relative to it."""
-        found: dict[str, str] = {}
+    def loose(self, base: tuple[str, ...], refs: RefSet, prefix: str = "") -> None:
+        """Add loose refs below ``base`` (e.g. ``.git/refs/heads``) to ``refs``, named relative to it.
+
+        A loose ref replaces a packed one of the same name, as in git, whether or not it resolves.
+        """
         try:
             entries = self.tree.list(*base)
         except FsError as exc:
-            if exc.code == "NOT_FOUND":
-                return found
-            raise GitStateError("GIT_METADATA_UNREADABLE", exc.message) from exc
+            if exc.code == "NOT_FOUND" and not prefix:
+                return
+            if not prefix:
+                raise GitStateError("GIT_METADATA_UNREADABLE", exc.message) from exc
+            self._unknown(
+                refs, prefix.rstrip("/"), f"ref directory {prefix.rstrip('/')} cannot be listed: {exc.message}"
+            )
+            return
         for entry in entries:
             name = f"{prefix}{entry.name}"
             self.count += 1
             if self.count > _MAX_REFS:
                 raise GitStateError("GIT_METADATA_TOO_LARGE", f"more than {_MAX_REFS} refs")
             if entry.kind == "directory":
-                found.update(self.loose((*base, entry.name), f"{name}/"))
-            elif entry.kind == "file":
-                try:
-                    value = _text(self.tree, (*base, entry.name), _REF_BYTES).strip()
-                except (FsError, GitStateError) as exc:
-                    self.problems.append(f"ref {name} is unreadable: {exc.message}")
-                    continue
-                if is_branch(name) and is_object_id(value):
-                    found[name] = value
-                elif not value.startswith("ref: "):
-                    self.problems.append(f"ref {name} is malformed and was ignored")
+                self.loose((*base, entry.name), refs, f"{name}/")
+                continue
+            if entry.kind != "file":
+                # A link or special file may stand for a ref or for a whole directory of refs.
+                self._unresolved(refs, name, f"is a {entry.kind}; not followed")
+                self._unknown(refs, name, f"ref entry {name} is a {entry.kind}; refs below it are unknown")
+                continue
+            try:
+                value = _text(self.tree, (*base, entry.name), _REF_BYTES)
+            except (FsError, GitStateError) as exc:
+                self._unresolved(refs, name, f"is unreadable: {exc.message}")
+                continue
+            stripped = value.strip()
+            if stripped.startswith("ref: "):
+                self._unresolved(refs, name, f"is a symbolic ref to {stripped[5:]!r}; not followed")
+            elif not is_object_id(stripped) or stripped + "\n" not in (value, value + "\n"):
+                self._unresolved(refs, name, "has a malformed value")
+            elif not is_branch(name):
+                self._unresolved(refs, name, "has an invalid name")
             else:
-                self.problems.append(f"ref {name} is a {entry.kind}, not a file, and was ignored")
-        return found
+                refs.unresolved.pop(name, None)
+                refs.resolved[name] = stripped
 
     def packed(self) -> list[tuple[str, str]]:
         try:
@@ -129,6 +233,15 @@ class _Reader:
         if len(refs) > _MAX_REFS:
             raise GitStateError("GIT_METADATA_TOO_LARGE", f"more than {_MAX_REFS} packed refs")
         return refs
+
+    def _unresolved(self, refs: RefSet, name: str, why: str) -> None:
+        refs.resolved.pop(name, None)
+        refs.unresolved[name] = why
+        self.problems.append(f"ref {name} {why}")
+
+    def _unknown(self, refs: RefSet, prefix: str, why: str) -> None:
+        refs.unknown = tuple(sorted({*refs.unknown, prefix}))
+        self.problems.append(why)
 
 
 def _config(text: str) -> tuple[str | None, str | None]:
@@ -184,25 +297,33 @@ def read_checkout(path: Path) -> CheckoutState:
             raise GitStateError("CHECKOUT_LAYOUT_UNSUPPORTED", "the reftable ref backend is not supported")
 
         reader = _Reader(tree)
-        branches: dict[str, str] = {}
-        remotes: dict[str, dict[str, str]] = {}
+        local, remote = RefSet(), RefSet()
         for ref, sha in reader.packed():
-            if ref.startswith("refs/heads/") and is_branch(ref[len("refs/heads/") :]):
-                branches[ref[len("refs/heads/") :]] = sha
+            if ref.startswith("refs/heads/"):
+                name = ref[len("refs/heads/") :]
+                if is_branch(name):
+                    local.resolved[name] = sha
+                else:
+                    reader._unresolved(local, name, "has an invalid name (packed)")
             elif ref.startswith("refs/remotes/"):
-                remote, _, name = ref[len("refs/remotes/") :].partition("/")
-                if name and name != "HEAD" and is_branch(name):
-                    remotes.setdefault(remote, {})[name] = sha
-        branches.update(reader.loose((".git", "refs", "heads")))
-        for remote, found in reader.loose((".git", "refs", "remotes")).items():
-            name, _, branch = remote.partition("/")
-            if branch and branch != "HEAD":
-                remotes.setdefault(name, {})[branch] = found
+                name = ref[len("refs/remotes/") :]
+                if name.partition("/")[2] and name.partition("/")[2] != "HEAD":
+                    if is_branch(name):
+                        remote.resolved[name] = sha
+                    else:
+                        reader._unresolved(remote, name, "has an invalid name (packed)")
+        reader.loose((".git", "refs", "heads"), local)
+        reader.loose((".git", "refs", "remotes"), remote)
+        for name in [n for n in remote.unresolved if n.endswith("/HEAD") and n.count("/") == 1]:
+            # refs/remotes/<remote>/HEAD is git's own symbolic ref to the default branch.
+            del remote.unresolved[name]
 
         try:
-            head = _symref(_text(tree, (".git", "HEAD"), _REF_BYTES))
+            head_kind, head = _head(_text(tree, (".git", "HEAD"), _REF_BYTES))
         except FsError as exc:
             raise GitStateError("GIT_METADATA_UNREADABLE", exc.message) from exc
+        if head_kind == UNKNOWN:
+            reader.problems.append("HEAD is neither a branch reference nor an object id")
 
         worktrees: list[Worktree] = []
         try:
@@ -213,28 +334,36 @@ def read_checkout(path: Path) -> CheckoutState:
             entries = []
         for entry in entries:
             if entry.kind != "directory":
-                reader.problems.append(f"worktree entry {entry.name} is a {entry.kind} and was ignored")
+                reader.problems.append(f"worktree entry {entry.name} is a {entry.kind}; its branch is unknown")
+                worktrees.append(Worktree(entry.name, None, None, UNKNOWN))
                 continue
             try:
-                branch = _symref(_text(tree, (".git", "worktrees", entry.name, "HEAD"), _REF_BYTES))
+                state, branch = _head(_text(tree, (".git", "worktrees", entry.name, "HEAD"), _REF_BYTES))
             except (FsError, GitStateError) as exc:
+                state, branch = UNKNOWN, None
                 reader.problems.append(f"worktree {entry.name} HEAD is unreadable: {getattr(exc, 'message', exc)}")
-                branch = None
+            else:
+                if state == UNKNOWN:
+                    reader.problems.append(f"worktree {entry.name} HEAD is neither a branch reference nor an object id")
             try:
                 gitdir = _text(tree, (".git", "worktrees", entry.name, "gitdir"), _REF_BYTES).strip()
                 location: str | None = gitdir.removesuffix("/.git") if gitdir else None
             except (FsError, GitStateError):
                 location = None
-            worktrees.append(Worktree(entry.name, location, branch))
+            worktrees.append(Worktree(entry.name, location, branch, state))
+
+        def ordered(refs: RefSet) -> RefSet:
+            return RefSet(dict(sorted(refs.resolved.items())), dict(sorted(refs.unresolved.items())), refs.unknown)
 
         return CheckoutState(
             path=str(tree.root),
             head_branch=head,
-            branches=dict(sorted(branches.items())),
-            remote_branches={k: dict(sorted(v.items())) for k, v in sorted(remotes.items())},
+            local=ordered(local),
+            remote=ordered(remote),
             worktrees=tuple(worktrees),
             origin_url=origin,
-            problems=tuple(sorted(reader.problems)),
+            head_known=head_kind != UNKNOWN,
+            problems=tuple(sorted(set(reader.problems))),
         )
 
 

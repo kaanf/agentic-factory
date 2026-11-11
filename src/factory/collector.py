@@ -96,24 +96,51 @@ def read_integration_head(api: GitHubApi, repo: Repository) -> str:
 def branch_pull_requests(api: GitHubApi, repo: Repository, branch: str) -> list[dict[str, Any]]:
     """Every pull request whose head is ``branch`` in ``repo`` itself (not a fork), by number.
 
-    Raises ``GitHubError`` when the list cannot be read completely.
+    A record is skipped only when it is confirmed to be about something else: a head ref naming a
+    different branch, or a head repository naming a different repository. A record whose identity
+    is missing or malformed (no head ref, a null head repository as for a deleted fork, no number,
+    state or base) makes the whole listing incomplete, because it might be this branch's PR.
+
+    Raises ``GitHubError`` when the list cannot be read completely or a record is incomplete.
     """
     owner = repo.github.split("/")[0]
     pulls = api.get_list(f"repos/{repo.github}/pulls", state="all", head=f"{owner}:{branch}")
     entries = []
-    for pr in pulls:
-        head_repo = (pr.get("head") or {}).get("repo") or {}
-        if pr["head"]["ref"] != branch or str(head_repo.get("full_name", "")).lower() != repo.github.lower():
-            continue  # same branch name in a fork: not this task's PR
-        merged = pr.get("merged_at") is not None
-        state = "merged" if merged else ("closed" if pr["state"] == "closed" else "open")
+    for index, pr in enumerate(pulls):
+        if not isinstance(pr, dict):
+            raise _IncompleteError(f"pull request {index} for {branch} is not an object")
+        number = pr.get("number")
+        if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+            raise _IncompleteError(f"pull request {index} for {branch} has no valid number")
+        head = pr.get("head")
+        if not isinstance(head, dict) or not isinstance(head.get("ref"), str) or not head["ref"]:
+            raise _IncompleteError(f"PR #{number} has no head ref, so it may be from {branch}")
+        if head["ref"] != branch:
+            continue  # confirmed: another branch
+        head_repo = head.get("repo")
+        full_name = head_repo.get("full_name") if isinstance(head_repo, dict) else None
+        if not isinstance(full_name, str) or not full_name:
+            raise _IncompleteError(
+                f"PR #{number} from {branch} has no head repository identity (deleted fork or incomplete record)"
+            )
+        if full_name.lower() != repo.github.lower():
+            continue  # confirmed: the same branch name in a fork, not this task's PR
+        base = pr.get("base")
+        if not isinstance(base, dict) or not isinstance(base.get("ref"), str) or not base["ref"]:
+            raise _IncompleteError(f"PR #{number} from {branch} has no base ref")
+        if pr.get("state") not in ("open", "closed") or "merged_at" not in pr:
+            raise _IncompleteError(f"PR #{number} from {branch} has no valid state")
+        merged_at = pr["merged_at"]
+        if merged_at is not None and (not isinstance(merged_at, str) or pr["state"] != "closed"):
+            raise _IncompleteError(f"PR #{number} from {branch} has a contradictory merge state")
+        merged = merged_at is not None
         entries.append(
             {
-                "baseBranch": pr["base"]["ref"],
+                "baseBranch": base["ref"],
                 # Unmerged PRs expose a test-merge SHA here; it is not a merge commit.
                 "mergeCommitSha": pr.get("merge_commit_sha") if merged else None,
-                "number": pr["number"],
-                "state": state,
+                "number": number,
+                "state": "merged" if merged else pr["state"],
             }
         )
     return sorted(entries, key=lambda e: e["number"])
