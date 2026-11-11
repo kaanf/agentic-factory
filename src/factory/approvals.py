@@ -28,7 +28,7 @@ from factory.github import GitHubApi, GitHubError, path_of, segment
 from factory.model import Project, Repository
 
 UNVERIFIABLE = "unverifiable"
-_SHA = re.compile(r"^[0-9a-f]{40}$")
+_SHA = re.compile(r"[0-9a-f]{40}")
 
 
 class _Unresolved(GitHubError):
@@ -40,7 +40,8 @@ def git_blob_sha(data: bytes) -> str:
 
 
 def _is_sha(value: Any) -> bool:
-    return isinstance(value, str) and _SHA.match(value) is not None
+    # fullmatch: with match(), "$" also accepts a trailing newline.
+    return isinstance(value, str) and _SHA.fullmatch(value) is not None
 
 
 def _merged_at(pr: dict[str, Any], what: str) -> str | None:
@@ -105,6 +106,8 @@ class _ApprovalCollector:
         if ref["object"]["type"] != "commit":
             raise GitHubError(f"refs/heads/{self.repo.integration_branch} does not point to a commit")
         sha: str = ref["object"]["sha"]
+        if not _is_sha(sha):
+            raise _Unresolved(f"refs/heads/{self.repo.integration_branch} has a malformed commit SHA {sha!r}")
         return sha
 
     def _file(self, path: str, ref: str) -> bytes | None:
@@ -131,7 +134,7 @@ class _ApprovalCollector:
             raise _Unresolved(f"{what} is not a pull request record")
         number, base = pr.get("number"), pr.get("base")
         valid_number = isinstance(number, int) and not isinstance(number, bool) and number > 0
-        if not valid_number or not isinstance(base, dict) or not isinstance(base.get("ref"), str):
+        if not valid_number or not isinstance(base, dict) or not isinstance(base.get("ref"), str) or not base["ref"]:
             raise _Unresolved(f"{what} has no valid number or base branch")
         full_name = base["repo"].get("full_name") if isinstance(base.get("repo"), dict) else None
         if not isinstance(full_name, str) or full_name.lower() != self.repo.github.lower():
@@ -163,6 +166,8 @@ class _ApprovalCollector:
         if not isinstance(latest, list) or len(latest) != 1:
             raise _Unresolved(f"no commit on {self.repo.integration_branch} is recorded as changing {repo_path}")
         commit: str = latest[0]["sha"]
+        if not _is_sha(commit):
+            raise _Unresolved(f"the latest commit recorded for {repo_path} has a malformed SHA {commit!r}")
         entry: dict[str, Any] = {
             "approved": False,
             "commit": commit,

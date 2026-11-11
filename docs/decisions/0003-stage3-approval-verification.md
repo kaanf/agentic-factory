@@ -22,7 +22,7 @@
 | A11 | `GitHubApi.get`/`get_list` take the endpoint path positionally only | A `path` query parameter (commits by file) collided with the argument name |
 | A12 | Every PR record (listing and detail) must name the requested number and target the planning repository; the detail record must agree with the listing on base branch, merge time and merge commit | A response for another PR or repository is not evidence about this one (review finding, PR #3) |
 | A13 | `PR_NOT_MERGED` requires an explicit `merged_at: null` on a record with a valid state; absent, malformed or contradictory merge status omits the entry | Absence of evidence must yield UNKNOWN, not a definite BLOCKED (review finding, PR #3) |
-| A14 | The merge commit record must describe the merge commit and have a valid first parent; otherwise the entry is omitted | Skipping the introduction check on malformed `parents` produced positive provenance (review finding, PR #3) |
+| A14 | The merge commit record must describe the merge commit and have a valid first parent; otherwise the entry is omitted. Every commit SHA from a response is matched as a whole string before use, because a 404 for a malformed ref would read as "absent" | Skipping the introduction check on malformed `parents` produced positive provenance (review finding, PR #3) |
 | A15 | Refusing `simulated` provenance is a requirement on future action-capable consumers, not on Stage 3 | The planner is advisory and dispatch is disabled; recorded as deferred in the architecture document |
 
 ## Changes to existing behavior

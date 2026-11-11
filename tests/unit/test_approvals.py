@@ -530,6 +530,27 @@ NO_FIRST_PARENT = "has no valid first parent"
         pytest.param({"parents": [PARENT], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-not-a-record"),
         pytest.param({"parents": [{"url": "x"}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-without-sha"),
         pytest.param({"parents": [{"sha": "HEAD~1"}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-sha-malformed"),
+        pytest.param(
+            {"parents": [{"sha": PARENT + "\n"}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-sha-newline"
+        ),
+        pytest.param(
+            {"parents": [{"sha": "\n" + PARENT}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-sha-leading-newline"
+        ),
+        pytest.param(
+            {"parents": [{"sha": PARENT + "\r\n"}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-sha-crlf"
+        ),
+        pytest.param(
+            {"parents": [{"sha": PARENT + " "}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-sha-trailing-space"
+        ),
+        pytest.param(
+            {"parents": [{"sha": PARENT.upper()}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-sha-uppercase"
+        ),
+        pytest.param(
+            {"parents": [{"sha": PARENT[:39]}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-sha-too-short"
+        ),
+        pytest.param(
+            {"parents": [{"sha": PARENT + "0"}], "sha": MERGE}, NO_FIRST_PARENT, id="first-parent-sha-too-long"
+        ),
         pytest.param({"parents": [{"sha": PARENT}], "sha": FEATURE}, "describes another commit", id="other-commit"),
         pytest.param({"parents": [{"sha": PARENT}]}, "describes another commit", id="commit-sha-missing"),
         pytest.param([], "describes another commit", id="not-a-commit-record"),
@@ -543,6 +564,80 @@ def test_merge_commit_without_a_valid_first_parent_is_omitted(
     responses[f"{BASE}/commits/{MERGE}"] = record
     snapshot, _ = collected(project, responses)
     assert_omitted(project, tmp_path, snapshot, message)
+
+
+def _parent_with_newline(project: Path) -> dict[str, Any]:
+    """The task is already at PARENT, but the commit record names PARENT followed by a newline.
+
+    Looked up, that malformed ref would 404 and read as "absent before the merge"."""
+    responses = approved_world(project, parent_text=text_of(project, TASK))
+    responses[f"{BASE}/commits/{MERGE}"] = commit_entry(MERGE, [PARENT + "\n"])
+    responses[q(f"{BASE}/contents/{TASK}", ref=PARENT + "\n")] = not_found()
+    return responses
+
+
+def test_first_parent_sha_with_trailing_newline_is_rejected_before_any_lookup(project: Path, tmp_path: Path) -> None:
+    control, _ = collected(project, approved_world(project, parent_text=text_of(project, TASK)))
+    assert entry(control)["evidence"] == "CONTENT_PRESENT_BEFORE_MERGE"  # the same facts with a valid parent SHA
+
+    snapshot, transport = collected(project, _parent_with_newline(project))
+    assert_omitted(project, tmp_path, snapshot, NO_FIRST_PARENT)
+    assert not any(r.startswith(f"{BASE}/contents/") and "%0A" in r for r in transport.requests)
+
+
+def test_cli_reports_first_parent_sha_with_trailing_newline_with_exit_3(project: Path, tmp_path: Path) -> None:
+    out, err = io.StringIO(), io.StringIO()
+    output = tmp_path / "s.json"
+    code = run(
+        ["evidence", "collect", str(project), "-o", str(output)],
+        out=out,
+        err=err,
+        transport=FakeTransport(_parent_with_newline(project)),
+    )
+    assert code == 3
+    assert f"incomplete: svc: approvals.{TASK}: merge commit {MERGE} of #7 has no valid first parent" in err.getvalue()
+    assert entry(json.loads(output.read_text())) is None
+
+
+@pytest.mark.parametrize("suffix", ["\n", "\r\n", " "])
+def test_merge_commit_sha_with_trailing_whitespace_is_rejected_before_any_lookup(
+    project: Path, tmp_path: Path, suffix: str
+) -> None:
+    """Listing and detail agree on the malformed SHA, so only the format check can catch it."""
+    malformed = MERGE + suffix
+    snapshot, transport = collected(
+        project,
+        approved_world(
+            project, associated=_listed(merge_commit_sha=malformed), detail=_detail(merge_commit_sha=malformed)
+        ),
+    )
+    assert_omitted(project, tmp_path, snapshot, "no recorded merge commit or merge actor")
+    assert not any(r.startswith((f"{BASE}/compare/{MERGE}", f"{BASE}/commits/{MERGE}")) for r in transport.requests)
+    assert q(f"{BASE}/contents/{TASK}", ref=malformed) not in transport.requests
+
+
+def test_integration_head_sha_with_trailing_newline_is_not_read_as_absent_content(
+    project: Path, tmp_path: Path
+) -> None:
+    """A malformed head ref would 404 every file and read as a definite NOT_ON_INTEGRATION_BRANCH."""
+    malformed = HEAD + "\n"
+    responses = approved_world(project)
+    # Two reads by the repository collector, then the approval collector's reads.
+    responses[f"{BASE}/git/ref/heads/dev"] = Sequence([ref(HEAD), ref(HEAD), ref(malformed)])
+    snapshot, transport = collected(project, responses)
+    assert snapshot["approvals"] == []
+    assert snapshot["collection"]["complete"] is False
+    assert any("malformed commit SHA" in e["message"] for e in snapshot["collection"]["errors"])
+    assert not any("%0A" in r for r in transport.requests)
+    assert approval_reasons(planned(project, snapshot, tmp_path)) == ("UNKNOWN", {"APPROVAL_EVIDENCE_MISSING"})
+
+
+def test_latest_commit_sha_with_trailing_newline_is_omitted(project: Path, tmp_path: Path) -> None:
+    responses = approved_world(project)
+    responses[q(f"{BASE}/commits", path=TASK, per_page=1, sha=HEAD)] = [commit_entry(FEATURE + "\n")]
+    snapshot, transport = collected(project, responses)
+    assert_omitted(project, tmp_path, snapshot, "has a malformed SHA")
+    assert not any("%0A" in r for r in transport.requests)
 
 
 def test_valid_two_parent_merge_commit_is_checked_against_its_first_parent(project: Path) -> None:
@@ -601,6 +696,36 @@ def test_valid_two_parent_merge_commit_is_checked_against_its_first_parent(proje
         ),
         pytest.param({"associated": _listed_without("number")}, "no valid number", id="listing-number-missing"),
         pytest.param({"associated": [None]}, "not a pull request record", id="listing-record-not-an-object"),
+        pytest.param(
+            {"associated": [pull(7, BRANCH, base="", merged_sha=MERGE)]},
+            "no valid number or base branch",
+            id="listing-base-branch-empty",
+        ),
+        pytest.param(
+            {"associated": [pull(7, BRANCH, base="", state="open")]},
+            "no valid number or base branch",
+            id="unmerged-listing-base-branch-empty",
+        ),
+        pytest.param(
+            {"associated": _listed(base={"repo": {"full_name": REPO}})},
+            "no valid number or base branch",
+            id="listing-base-branch-missing",
+        ),
+        pytest.param(
+            {"associated": _listed(base={"ref": None, "repo": {"full_name": REPO}})},
+            "no valid number or base branch",
+            id="listing-base-branch-null",
+        ),
+        pytest.param(
+            {"associated": _listed(base={"ref": 7, "repo": {"full_name": REPO}})},
+            "no valid number or base branch",
+            id="listing-base-branch-not-a-string",
+        ),
+        pytest.param(
+            {"detail": pull_detail(7, BRANCH, merged_sha=MERGE, base="")},
+            "no valid number or base branch",
+            id="detail-base-branch-empty",
+        ),
     ],
 )
 def test_contradictory_or_incomplete_pull_request_identity_is_omitted(
@@ -679,6 +804,18 @@ def test_cli_reports_malformed_records_with_exit_3(project: Path, tmp_path: Path
     )
     assert code == 3
     assert f"incomplete: svc: approvals.{TASK}:" in err.getvalue()
+    assert entry(json.loads(output.read_text())) is None
+
+
+def test_cli_reports_empty_base_branch_with_exit_3(project: Path, tmp_path: Path) -> None:
+    responses = approved_world(project, associated=[pull(7, BRANCH, base="", merged_sha=MERGE)])
+    out, err = io.StringIO(), io.StringIO()
+    output = tmp_path / "s.json"
+    code = run(
+        ["evidence", "collect", str(project), "-o", str(output)], out=out, err=err, transport=FakeTransport(responses)
+    )
+    assert code == 3
+    assert f"incomplete: svc: approvals.{TASK}: an associated pull request has no valid" in err.getvalue()
     assert entry(json.loads(output.read_text())) is None
 
 

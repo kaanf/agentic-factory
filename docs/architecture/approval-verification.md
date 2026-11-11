@@ -38,8 +38,8 @@ planning repository (default: the repository root).
 1. `GET contents/{path}?ref={integration head}`: 404 → `approved: false`, `NOT_ON_INTEGRATION_BRANCH`.
    Otherwise the content's git blob SHA must equal the reported `sha`, and its SHA-256 is recorded.
 2. `GET commits?path={path}&sha={head}&per_page=1`: the latest commit that changed the file.
-3. `GET commits/{commit}/pulls`: every record must have a positive integer `number` and a base
-   branch, and its `base.repo.full_name` must be the planning repository; otherwise omitted. No PR →
+3. `GET commits/{commit}/pulls`: every record must have a positive integer `number` and a
+   non-empty base branch name, and its `base.repo.full_name` must be the planning repository; otherwise omitted. No PR →
    `NO_PULL_REQUEST` (direct push); no PR into the integration branch →
    `PR_NOT_INTO_INTEGRATION_BRANCH`; none merged → `PR_NOT_MERGED`; more than one merged into the
    integration branch → ambiguous, omitted. A PR counts as not merged only if its record has an
@@ -87,6 +87,11 @@ not help, because `github` provenance alone triggers the rule.
 As for the rest of the collector: missing, contradictory or ambiguous records omit the file's entry
 and add a `collection.errors` item (exit code 3, `collection.complete: false`); a rate limit stops
 all further requests. Only the affected file is omitted.
+
+Every commit SHA taken from a GitHub response (integration head, latest commit, merge commit, first
+parent) must be exactly 40 lowercase hex characters, with nothing before or after, before it is used
+in a request. A malformed ref would make the contents API answer 404, which this collector reads as
+"file absent"; validating first keeps a bad ref from turning into a finding.
 
 Absence of evidence is not evidence of absence. `approved: false` (BLOCKED) is written only when the
 records conclusively show a negative fact. A record with a missing or malformed field that the
