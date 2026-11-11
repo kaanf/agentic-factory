@@ -4,6 +4,7 @@ project:
   name: Factory Core describing its own repository
 approvers: [kaanf]
 planningRepository: factory
+planningDirectory: tests/fixtures/agentic-factory-project
 repositories:
   - id: factory
     github: kaanf/agentic-factory

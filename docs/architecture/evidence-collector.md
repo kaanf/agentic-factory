@@ -28,6 +28,7 @@ Planning stays pure and offline.
 | `reachableFromIntegrationHead` | `GET repos/{repo}/compare/{sha}...{head}`: `ahead` or `identical` → true; `behind` or `diverged` → false |
 | `mergedPullRequests` | `GET repos/{repo}/commits/{sha}/pulls`, keeping only merged PRs whose `merge_commit_sha` equals the commit |
 | `checkRuns` | `GET repos/{repo}/commits/{sha}/check-runs?filter=all` (every attempt). For `github-actions` runs, the event, head branch and workflow path come from the workflow run with the same `check_suite_id` (`GET .../actions/runs?head_sha={sha}`), and the attempt from the job whose `check_run_url` names the check run (`GET .../actions/runs/{id}/jobs?filter=all`). Runs from other apps get empty provenance, so they can never satisfy a required check. Runs whose `head_sha` differs are dropped. |
+| `approvals`, `credentialIsolation` | Merge records of the planning repository; see [approval-verification.md](approval-verification.md) |
 | `outputs` (head only) | `GET repos/{repo}/contents/{path}?ref={head}`; 404 → absent; the version is read with the manifest's JSON Pointer and must be a string |
 
 PR bodies, comments and any agent output are never read.
@@ -48,8 +49,8 @@ PR bodies, comments and any agent output are never read.
 
 ## Safety
 
-- The transport can only issue `GET` requests, only to `repos/{owner}/{name}/...` paths on the GitHub
-  CLI's default host, and it rejects `.` and `..` path segments. There is no write code path.
+- The transport can only issue `GET` requests, only to `repos/{owner}/{name}/...` paths and `user`
+  (the collecting identity) on the GitHub CLI's default host, and it rejects `.` and `..` path segments. There is no write code path.
 - Authentication is whatever `gh` already holds; the collector never reads or stores tokens.
 - The project directory is never written to.
 
@@ -59,9 +60,9 @@ A `github` snapshot records what the API returned at `observedAt`. It is still n
 authenticated:
 
 - the snapshot is a local file that can be edited after collection;
-- approvals are not collected (`approvals: []`), so every approval is `UNKNOWN` and no task can
-  reach `READY` from a collected snapshot alone. Deriving approvals from merge records is Stage 3,
-  and is meaningful only once agent and human GitHub identities are separate (4B §5, D4–D8).
+- approvals record GitHub merge provenance, but human authorization is unverifiable while agent and
+  human GitHub identities are not separate (4B §5, D4–D8), so no task can reach `READY` from a
+  collected snapshot. See [approval-verification.md](approval-verification.md).
 
 ## Recorded fixture
 

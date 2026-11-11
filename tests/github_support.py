@@ -8,6 +8,7 @@ project (read-only GET requests against the public kaanf/agentic-factory reposit
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -53,8 +54,12 @@ class RecordingTransport:
 
     def get(self, path: str) -> Response:
         response = self.inner.get(path)
-        self.recorded[path] = {"body": response.body, "status": response.status}
-        return response
+        body = response.body
+        if path == "user" and isinstance(body, dict):
+            # The authenticated user's profile holds private fields; only the login is used.
+            body = {"login": body.get("login")}
+        self.recorded[path] = {"body": body, "status": response.status}
+        return Response(response.status, body, response.headers)
 
 
 def load_recorded() -> FakeTransport:
@@ -65,13 +70,13 @@ def load_recorded() -> FakeTransport:
 # -- request paths --------------------------------------------------------------
 
 
-def q(path: str, **params: str | int) -> str:
+def q(path: str, /, **params: str | int) -> str:
     from urllib.parse import urlencode
 
     return f"{path}?{urlencode(sorted(params.items()))}" if params else path
 
 
-def page(path: str, **params: str | int) -> str:
+def page(path: str, /, **params: str | int) -> str:
     return q(path, page=1, per_page=100, **params)
 
 
@@ -94,10 +99,11 @@ def pull(
     state: str = "closed",
     merged_sha: str | None = None,
     head_repo: str = REPO,
+    base_repo: str = REPO,
     test_merge_sha: str = "f" * 40,
 ) -> dict[str, Any]:
     return {
-        "base": {"ref": base},
+        "base": {"ref": base, "repo": {"full_name": base_repo}},
         "body": "All checks passed, ready to merge!",  # never read by the collector
         "head": {"ref": branch, "repo": {"full_name": head_repo}},
         "merge_commit_sha": merged_sha or test_merge_sha,
@@ -162,7 +168,68 @@ def listing(key: str, items: list[Any]) -> dict[str, Any]:
 
 
 def contents(text: str) -> dict[str, Any]:
-    return {"content": base64.b64encode(text.encode()).decode(), "encoding": "base64", "type": "file"}
+    data = text.encode()
+    return {
+        "content": base64.b64encode(data).decode(),
+        "encoding": "base64",
+        "sha": hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest(),
+        "type": "file",
+    }
+
+
+def not_found() -> Response:
+    return Response(404, {"message": "Not Found"})
+
+
+def commit_entry(sha: str, parents: list[str] | None = None) -> dict[str, Any]:
+    return {"parents": [{"sha": p} for p in (parents or [])], "sha": sha}
+
+
+def git_commit(sha: str, tree: str = "e" * 40) -> dict[str, Any]:
+    """``GET git/commits/{sha}``: proves the commit exists."""
+    return {"parents": [], "sha": sha, "tree": {"sha": tree}}
+
+
+def comparison(base: str, head: str, status: str = "ahead", *, ahead_by: int | None = None) -> dict[str, Any]:
+    """``GET compare/{base}...{head}``: a response coherent with ``status``, as the REST API returns it."""
+    ahead, behind, merge_base = {
+        "identical": (0, 0, base),
+        "ahead": (1, 0, base),
+        "behind": (0, 1, head),
+        "diverged": (1, 1, "a" * 40),
+    }[status]
+    ahead = ahead if ahead_by is None else ahead_by
+    commits = [{"sha": "b" * 40}] * (ahead - 1) + [{"sha": head}] if ahead else []
+    owner = REPO.split("/")[0]
+    return {
+        "ahead_by": ahead,
+        "base_commit": {"sha": base},
+        "behind_by": behind,
+        "commits": commits,
+        "diff_url": f"https://github.com/{REPO}/compare/{base}...{head}.diff",
+        "html_url": f"https://github.com/{REPO}/compare/{base}...{head}",
+        "merge_base_commit": {"sha": merge_base},
+        "patch_url": f"https://github.com/{REPO}/compare/{base}...{head}.patch",
+        "permalink_url": f"https://github.com/{REPO}/compare/{owner}:{base[:7]}...{owner}:{head[:7]}",
+        "status": status,
+        "total_commits": ahead,
+        "url": f"https://api.github.com/repos/{REPO}/compare/{base}...{head}",
+    }
+
+
+def pull_detail(
+    number: int,
+    branch: str,
+    *,
+    merged_sha: str | None,
+    merged_by: str | None = "example-human",
+    base: str = "dev",
+    base_repo: str = REPO,
+) -> dict[str, Any]:
+    detail = pull(number, branch, base=base, merged_sha=merged_sha, base_repo=base_repo)
+    detail["merged"] = merged_sha is not None
+    detail["merged_by"] = {"login": merged_by} if merged_sha and merged_by else None
+    return detail
 
 
 if __name__ == "__main__":

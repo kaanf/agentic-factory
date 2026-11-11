@@ -1,0 +1,62 @@
+# 0003: Stage 3 approval verification
+
+- Status: proposed (for human review with the Stage 3 PR)
+- Date: 2026-11-11
+- Inputs: Stage 4B §5 (real human approval), §8 (security model), §10 (Stage 3 acceptance),
+  Stage 3 brief, decisions 0001 and 0002.
+
+## Decisions
+
+| # | Decision | Reason |
+|---|---|---|
+| A1 | Approvals are collected by `factory evidence collect` into the existing `approvals` array; no new command | The brief asks to integrate with the evidence snapshot; one collection, one snapshot |
+| A2 | The collector records provenance facts; the planner judges approver membership and staleness | Same split as E1; `planning.py` gains one rule, the engine is otherwise unchanged |
+| A3 | Approval is derived from the latest commit that changed the file on the integration head, its single merged PR into the integration branch, and that PR's `merged_by` | 4B §5 mechanism step 2 |
+| A4 | The merge commit must be reachable from the head, hold the same content, and its first parent must not already hold it | Rejects content that reached the branch some other way and PRs that did not introduce it |
+| A5 | Every collected entry carries `humanAuthorization: "unverifiable"`; the schema has no other value | Agents can use the approver's GitHub credentials (4B §5 constraint). A login proves the credential, not the person |
+| A6 | The planner returns UNKNOWN `HUMAN_AUTHORIZATION_UNVERIFIABLE` for such entries and for any approval in a `github` snapshot | An unverifiable approval must never make a task READY, even if the marker is edited out |
+| A7 | `credentialIsolation` reports `shared` when the collecting identity is an approver, else `unverified`; there is no `isolated` status | Detecting shared credentials is possible; proving isolation is not, so no outcome can relax A5–A6 |
+| A8 | `GET user` is added to the transport allowlist, beside `repos/...` | Needed for A7; still GET-only. The recorder stores only `login` from it |
+| A9 | Definite negatives (direct push, unmerged PR, wrong base, already present, absent) are written as `approved: false`; missing, contradictory or ambiguous records omit the entry | Definite facts BLOCK; incomplete ones are UNKNOWN (E3) |
+| A10 | Optional manifest field `planningDirectory` locates the project inside the planning repository | Lets the self-describing fixture be verified live against real merge records |
+| A11 | `GitHubApi.get`/`get_list` take the endpoint path positionally only | A `path` query parameter (commits by file) collided with the argument name |
+| A12 | Every PR record (listing and detail) must name the requested number and target the planning repository; the detail record must agree with the listing on base branch, merge time and merge commit | A response for another PR or repository is not evidence about this one (review finding, PR #3) |
+| A13 | `PR_NOT_MERGED` requires an explicit `merged_at: null` on a record with a valid state; absent, malformed or contradictory merge status omits the entry | Absence of evidence must yield UNKNOWN, not a definite BLOCKED (review finding, PR #3) |
+| A14 | The merge commit record must describe the merge commit and have a valid first parent; otherwise the entry is omitted. Every commit SHA from a response is matched as a whole string before use, because a 404 for a malformed ref would read as "absent" | Skipping the introduction check on malformed `parents` produced positive provenance (review finding, PR #3) |
+| A15 | Refusing `simulated` provenance is a requirement on future action-capable consumers, not on Stage 3 | The planner is advisory and dispatch is disabled; recorded as deferred in the architecture document |
+| A16 | A contents 404 counts as absence only at a commit confirmed by `GET git/commits/{sha}` (cached per collection); otherwise the entry is omitted | The contents API answers 404 for a nonexistent commit too, which made a nonexistent first parent look like "introduced by this PR" (review finding, PR #3) |
+| A17 | A compare response must name the requested base, have status, counts and merge base that agree, and (as a consistency check, not identity) list the head among its commits when ahead | An `identical` status for two different commits was accepted as reachability (review finding, PR #3) |
+| A18 | PR base branches and the configured integration branch must pass git's branch-name rules; malformed names omit the entry, valid other branches still BLOCK | Malformed names such as `"dev\n"` or `"/dev"` were read as a definite wrong base (review finding, PR #3) |
+| A19 | A compare response's `url` and `html_url` must equal, as whole strings, the github.com URLs built from the planning repository and the full requested base and head SHAs; `diff_url`/`patch_url` must agree if present; an abbreviated `permalink_url` may only fail to contradict | Membership of the head in `commits[]` was taken as head identity, so git/git's genuine `fbd2d1e...1891de4` response was accepted for `fbd2d1e...03b4152` (review finding, PR #3) |
+
+## Changes to existing behavior
+
+- Collected snapshots now contain approval entries and a `credentialIsolation` block instead of
+  `approvals: []`. Tasks that were UNKNOWN with `APPROVAL_EVIDENCE_MISSING` are now UNKNOWN with
+  `HUMAN_AUTHORIZATION_UNVERIFIABLE` (or BLOCKED, or STALE, when GitHub shows a definite problem).
+  No task becomes READY.
+- `evidence collect` writes one `warning: human authorization unverifiable: ...` line to stderr.
+  Exit codes are unchanged.
+- Hand-written `simulated` snapshots without the new fields evaluate exactly as before.
+- Stage 2 collector tests that inject simulated approvals into a collected snapshot now label it
+  `simulated`, because the planner rightly refuses those approvals in a `github` snapshot.
+- The recorded GitHub fixture was re-recorded at `dev` = `62c1a3c` (PR #2 merge), so its expected
+  facts moved from PR #1 to PR #2.
+- One real response was added to that fixture without re-recording the rest:
+  `GET git/commits/4f7b49d` (the first parent of `62c1a3c`), needed by A16. Mocked test worlds that
+  serve a contents 404 now also serve the commit record it requires.
+- `tests/fixtures/github/git-git-compare.json` holds two real `git/git` compare responses (A19's
+  counterexample), trimmed of `files` and of commit details the collector does not read.
+
+## Live evidence (2026-11-11, `kaanf/agentic-factory`)
+
+The three fixture artifacts are at the `dev` head with their committed content. Each was last changed
+by `5076b60`, which belongs only to PR #2, merged into `dev` by `kaanf` as merge commit `62c1a3c`. The
+files are absent at its first parent `4f7b49d`. The collecting identity is `kaanf`, an approver, so
+`credentialIsolation.status` is `shared` and every task is UNKNOWN `HUMAN_AUTHORIZATION_UNVERIFIABLE`.
+That matches 4B's Stage 3 live acceptance.
+
+## Not done
+
+Credential separation (4B P1–P3, D5, D7, D8) and any check that verifies it; signed-commit or review
+based approval; detection of login renames between merge and collection; GitHub Enterprise hosts.

@@ -9,7 +9,9 @@ never counts as success.
 
 **Scope.** `validate` and `plan` read only local files. `evidence collect` makes read-only GitHub
 API requests through the GitHub CLI. Nothing dispatches agents, pushes, merges, deploys or writes to
-the project directory. No snapshot is treated as authenticated, and approvals are not collected yet.
+the project directory. No snapshot is treated as authenticated. Approvals are read from merge records,
+but human authorization is unverifiable while agents can use the approver's GitHub credentials, so no
+collected approval lets a task start.
 
 ## Install
 
@@ -40,7 +42,10 @@ byte-identical for identical inputs: keys are sorted and no timestamps are gener
 `evidence collect` reads repository, branch, pull request, commit, check-run, workflow-run and file
 data from GitHub and writes a snapshot for `plan`. It reports facts; `plan` judges them. Facts that
 cannot be collected completely are omitted and evaluate as UNKNOWN. See
-[evidence-collector.md](docs/architecture/evidence-collector.md).
+[evidence-collector.md](docs/architecture/evidence-collector.md). It also records which merged PR
+introduced each task, profile and ADR file, and who merged it; see
+[approval-verification.md](docs/architecture/approval-verification.md) for why that is provenance
+and not human approval.
 
 | Exit code | Meaning |
 |---|---|
@@ -77,7 +82,10 @@ Schemas: `src/factory/schemas/*.schema.json` (JSON Schema 2020-12, shipped insid
   failures are handled.
 - [Decision 0001](docs/decisions/0001-stage1-implementation-decisions.md): how the blueprint, 4A
   and 4B were reconciled, and what was retained, changed, deferred or rejected.
+- [Approval verification](docs/architecture/approval-verification.md): merge-record provenance and the
+  human-authorization trust boundary.
 - [Decision 0002](docs/decisions/0002-stage2-evidence-collector.md): Stage 2 collector decisions.
+- [Decision 0003](docs/decisions/0003-stage3-approval-verification.md): Stage 3 approval decisions.
 
 ## Development
 

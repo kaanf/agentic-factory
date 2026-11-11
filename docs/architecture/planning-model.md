@@ -14,7 +14,7 @@ silently `FAIL`.
 
 | Level | PASS requires |
 |---|---|
-| `approved` | Snapshot approval for the task file at its current SHA-256, `approved: true`, `mergedBy` in the manifest's `approvers`; specification hash unchanged |
+| `approved` | Snapshot approval for the task file at its current SHA-256, `approved: true`, `mergedBy` in the manifest's `approvers`, human authorization not marked unverifiable; specification hash unchanged |
 | `merged` | Exactly one PR from `<featurePrefix><id>-r<revision>` merged into the repository's integration branch, with a known merge commit |
 | `validated` | Integration evidence (below) passes on that PR's merge commit |
 | `integration-ready` | The repository's current integration head is itself validated, and every output the task `provides` is present at that head with a valid semantic version |
@@ -125,7 +125,11 @@ Rules:
 
 - `provenance.kind` is `simulated` (hand-written or test snapshots) or `github` (written by
   `factory evidence collect`). Plan output always reports `"authenticated": false`: a snapshot is a
-  local file the planner cannot verify, and approvals are not collected yet.
+  local file the planner cannot verify, and collected approvals cannot be attributed to a human.
+- Collected approval entries add `commit`, `mergeCommit`, `evidence` and `humanAuthorization:
+  "unverifiable"`; the snapshot adds `credentialIsolation`. An approval with `humanAuthorization`, or
+  any approval in a `github` snapshot, is UNKNOWN `HUMAN_AUTHORIZATION_UNVERIFIABLE` at best. See
+  [approval-verification.md](approval-verification.md).
 - The optional `collection` block (`collector`, `complete`, `errors`) is an audit record written by
   the collector. The planner ignores it; facts that could not be collected are simply absent.
 - A branch listed with `"pullRequests": []` means "no PR exists". An unlisted branch is `UNKNOWN`.
@@ -141,7 +145,7 @@ in `causes`.
 
 | Group | Codes |
 |---|---|
-| Approval | `TASK_NOT_APPROVED`, `PROFILE_NOT_APPROVED`, `ADR_NOT_APPROVED`, `APPROVAL_EVIDENCE_MISSING`, `NOT_APPROVED`, `APPROVER_NOT_AUTHORIZED`, `ADR_NOT_ACCEPTED` |
+| Approval | `TASK_NOT_APPROVED`, `PROFILE_NOT_APPROVED`, `ADR_NOT_APPROVED`, `APPROVAL_EVIDENCE_MISSING`, `NOT_APPROVED`, `APPROVER_NOT_AUTHORIZED`, `HUMAN_AUTHORIZATION_UNVERIFIABLE`, `ADR_NOT_ACCEPTED` |
 | Staleness | `SPEC_CHANGED`, `TASK_CHANGED_SINCE_APPROVAL`, `PROFILE_CHANGED_SINCE_APPROVAL`, `ADR_CHANGED_SINCE_APPROVAL`, `PROFILE_REVISION_MISMATCH`, `ADR_REVISION_MISMATCH`, `TASK_STALE` |
 | Pull requests | `PR_EVIDENCE_MISSING`, `NOT_MERGED`, `PR_MERGED_INTO_WRONG_BASE`, `AMBIGUOUS_PULL_REQUEST`, `MERGE_COMMIT_UNKNOWN` |
 | Commits and checks | `COMMIT_EVIDENCE_MISSING`, `REACHABILITY_UNKNOWN`, `COMMIT_NOT_REACHABLE`, `PR_MAPPING_UNKNOWN`, `COMMIT_NOT_PR_MERGE`, `AMBIGUOUS_PR_MAPPING`, `PR_MAPPING_MISMATCH`, `NO_REQUIRED_CHECKS`, `CHECK_EVIDENCE_MISSING`, `CHECK_MISSING`, `CHECK_PROVENANCE_MISMATCH`, `CHECK_FAILED`, `CHECK_IN_PROGRESS`, `CHECK_INCONCLUSIVE`, `AMBIGUOUS_CHECK_RUN`, `HEAD_NOT_VALIDATED`, `INTEGRATION_HEAD_UNKNOWN`, `TASK_NOT_VALIDATED` |

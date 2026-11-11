@@ -19,6 +19,9 @@ class Approval:
     sha256: str
     approved: bool
     merged_by: str | None
+    # None for hand-written entries; "unverifiable" for entries the collector derived from GitHub.
+    human_authorization: str | None = None
+    evidence: str | None = None
 
 
 @dataclass(frozen=True)
@@ -76,7 +79,8 @@ class Snapshot:
     @property
     def authenticated(self) -> bool:
         # A snapshot is a local file: even one written by the GitHub collector can be edited
-        # afterwards, and approvals are not collected yet. Nothing in v1 is authenticated.
+        # afterwards, and collected approvals cannot be attributed to a human. Nothing in v1 is
+        # authenticated.
         return False
 
 
@@ -178,7 +182,10 @@ def load_snapshot(path: Path, project: Project) -> SnapshotResult:
         provenance=document["provenance"]["kind"],
         observed_at=document.get("observedAt"),
         approvals={
-            a["path"]: Approval(a["path"], a["sha256"], a["approved"], a.get("mergedBy")) for a in document["approvals"]
+            a["path"]: Approval(
+                a["path"], a["sha256"], a["approved"], a.get("mergedBy"), a.get("humanAuthorization"), a.get("evidence")
+            )
+            for a in document["approvals"]
         },
         repositories={repo_id: _repository(raw) for repo_id, raw in document["repositories"].items()},
     )

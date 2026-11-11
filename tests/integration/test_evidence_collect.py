@@ -21,7 +21,14 @@ from factory.collector import collect
 from factory.github import GhCliTransport, GitHubApi, GitHubError, Response
 from factory.project import load_project
 
-DEV_HEAD = "4f7b49d6b16b73f3de7c5a384f4ca05736046e6b"  # merge commit of PR #1, with push CI
+DEV_HEAD = "62c1a3c2fc5df43fd23f0b13b3024ac1b24f45a2"  # merge commit of PR #2, with push CI
+STAGE2_COMMIT = "5076b60e8f664957df7f9989a853bae428eb0198"  # the PR #2 commit that added the fixture files
+
+
+SHARED_MESSAGE = (
+    "the GitHub identity used for collection (kaanf) is an approver: agent and human credentials are shared, "
+    "so a merge by an approver's login cannot be attributed to a human"
+)
 
 
 def _cli(*args: str | Path, transport: Any = None) -> tuple[int, str, str]:
@@ -43,7 +50,9 @@ def test_recorded_github_responses_produce_the_expected_snapshot() -> None:
     assert facts["integrationHead"] == DEV_HEAD
     assert facts["branches"] == {
         "feat/approval-verification-r1": {"pullRequests": []},
-        "feat/evidence-collector-r1": {"pullRequests": []},
+        "feat/evidence-collector-r1": {
+            "pullRequests": [{"baseBranch": "dev", "mergeCommitSha": DEV_HEAD, "number": 2, "state": "merged"}]
+        },
     }
     assert facts["commits"][DEV_HEAD] == {
         "checkRuns": [
@@ -58,9 +67,27 @@ def test_recorded_github_responses_produce_the_expected_snapshot() -> None:
                 "workflowPath": ".github/workflows/ci.yml",
             }
         ],
-        "mergedPullRequests": [1],
+        "mergedPullRequests": [2],
         "reachableFromIntegrationHead": True,
     }
+    # Each artifact reached dev through PR #2 (a merge commit over a separate feature commit),
+    # merged by an approver's login. Provenance is recorded; human authorization is not claimed.
+    assert [
+        (a["path"], a["approved"], a["evidence"], a["mergedBy"], a["pullRequest"]) for a in result.snapshot["approvals"]
+    ] == [
+        (path, True, "MERGED_PULL_REQUEST", "kaanf", 2)
+        for path in (
+            "factory/profiles/factory.yaml",
+            "factory/tasks/approval-verification.yaml",
+            "factory/tasks/evidence-collector.yaml",
+        )
+    ]
+    assert {(a["commit"], a["mergeCommit"], a["humanAuthorization"]) for a in result.snapshot["approvals"]} == {
+        (STAGE2_COMMIT, DEV_HEAD, "unverifiable")
+    }
+    assert result.snapshot["approvals"][2]["sha256"] == project.digests["factory/tasks/evidence-collector.yaml"]
+    assert result.snapshot["credentialIsolation"]["status"] == "shared"
+    assert result.snapshot["credentialIsolation"]["identity"] == "kaanf"
     # Every recorded response was needed, and nothing else was requested.
     assert sorted(set(transport.requests)) == sorted(transport.responses)
 
@@ -68,7 +95,8 @@ def test_recorded_github_responses_produce_the_expected_snapshot() -> None:
 def test_recorded_snapshot_plans_with_the_existing_engine(tmp_path: Path) -> None:
     snapshot_path = tmp_path / "live.json"
     code, out, err = _cli("evidence", "collect", SELF_PROJECT, "--output", snapshot_path, transport=load_recorded())
-    assert (code, out, err) == (0, "", "")
+    assert (code, out) == (0, "")
+    assert err == f"warning: human authorization unverifiable: {SHARED_MESSAGE}\n"
     code, out, err = _cli("plan", SELF_PROJECT, "--evidence", snapshot_path, "--format", "json")
     assert code == 0, err
     plan = json.loads(out)
@@ -77,12 +105,13 @@ def test_recorded_snapshot_plans_with_the_existing_engine(tmp_path: Path) -> Non
     task = task_of(plan, "evidence-collector")
     # The real integration head passes integration evidence on its own...
     assert task["levels"]["integration-ready"]["reasons"] == []
-    # ...but nothing can start: approvals are not collected and stay UNKNOWN.
-    assert task["state"] == "UNKNOWN"
-    assert "APPROVAL_EVIDENCE_MISSING" in codes(task["gates"]["start"]["reasons"])
-    dependent = task_of(plan, "approval-verification")
-    assert dependent["state"] == "BLOCKED"
-    assert "NOT_MERGED" in codes(dependent["gates"]["start"]["reasons"])
+    # ...but nothing can start or complete: a merge by the approver's login is not human approval
+    # while agents share that login.
+    for task_id in ("evidence-collector", "approval-verification"):
+        planned = task_of(plan, task_id)
+        assert planned["state"] == "UNKNOWN"
+        assert "HUMAN_AUTHORIZATION_UNVERIFIABLE" in codes(planned["gates"]["start"]["reasons"])
+    assert task["levels"]["merged"]["result"] == "UNKNOWN"
 
 
 # -- CLI behavior ---------------------------------------------------------------------
@@ -90,7 +119,7 @@ def test_recorded_snapshot_plans_with_the_existing_engine(tmp_path: Path) -> Non
 
 def test_collect_writes_json_to_stdout() -> None:
     code, out, err = _cli("evidence", "collect", SELF_PROJECT, transport=load_recorded())
-    assert code == 0 and err == ""
+    assert code == 0 and err.startswith("warning: human authorization unverifiable")
     assert json.loads(out)["provenance"]["kind"] == "github"
 
 
@@ -167,7 +196,8 @@ def test_gh_transport_runs_only_get_requests(monkeypatch: pytest.MonkeyPatch) ->
 @pytest.mark.parametrize(
     "path",
     [
-        "user",
+        "user/repos",
+        "users/kaanf",
         "graphql",
         "https://evil.example/repos/a/b",
         "repos/a/b/../../user",

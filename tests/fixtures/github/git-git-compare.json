@@ -1,0 +1,1125 @@
+{
+  "responses": {
+    "BH": {
+      "ahead_by": 127,
+      "base_commit": {
+        "author": {
+          "avatar_url": "https://avatars.githubusercontent.com/u/54884?v=4",
+          "events_url": "https://api.github.com/users/gitster/events{/privacy}",
+          "followers_url": "https://api.github.com/users/gitster/followers",
+          "following_url": "https://api.github.com/users/gitster/following{/other_user}",
+          "gists_url": "https://api.github.com/users/gitster/gists{/gist_id}",
+          "gravatar_id": "",
+          "html_url": "https://github.com/gitster",
+          "id": 54884,
+          "login": "gitster",
+          "node_id": "MDQ6VXNlcjU0ODg0",
+          "organizations_url": "https://api.github.com/users/gitster/orgs",
+          "received_events_url": "https://api.github.com/users/gitster/received_events",
+          "repos_url": "https://api.github.com/users/gitster/repos",
+          "site_admin": false,
+          "starred_url": "https://api.github.com/users/gitster/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/gitster/subscriptions",
+          "type": "User",
+          "url": "https://api.github.com/users/gitster",
+          "user_view_type": "public"
+        },
+        "comments_url": "https://api.github.com/repos/git/git/commits/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e/comments",
+        "commit": {
+          "author": {
+            "date": "2026-11-09T22:50:55Z",
+            "email": "gitster@pobox.com",
+            "name": "Junio C Hamano"
+          },
+          "comment_count": 0,
+          "committer": {
+            "date": "2026-11-09T22:50:55Z",
+            "email": "gitster@pobox.com",
+            "name": "Junio C Hamano"
+          },
+          "message": "The 18th batch\n\nSigned-off-by: Junio C Hamano <gitster@pobox.com>",
+          "tree": {
+            "sha": "c8c3560befc757259ee25259fe274c5c3811d987",
+            "url": "https://api.github.com/repos/git/git/git/trees/c8c3560befc757259ee25259fe274c5c3811d987"
+          },
+          "url": "https://api.github.com/repos/git/git/git/commits/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e",
+          "verification": {
+            "payload": null,
+            "reason": "unsigned",
+            "signature": null,
+            "verified": false,
+            "verified_at": null
+          }
+        },
+        "committer": {
+          "avatar_url": "https://avatars.githubusercontent.com/u/54884?v=4",
+          "events_url": "https://api.github.com/users/gitster/events{/privacy}",
+          "followers_url": "https://api.github.com/users/gitster/followers",
+          "following_url": "https://api.github.com/users/gitster/following{/other_user}",
+          "gists_url": "https://api.github.com/users/gitster/gists{/gist_id}",
+          "gravatar_id": "",
+          "html_url": "https://github.com/gitster",
+          "id": 54884,
+          "login": "gitster",
+          "node_id": "MDQ6VXNlcjU0ODg0",
+          "organizations_url": "https://api.github.com/users/gitster/orgs",
+          "received_events_url": "https://api.github.com/users/gitster/received_events",
+          "repos_url": "https://api.github.com/users/gitster/repos",
+          "site_admin": false,
+          "starred_url": "https://api.github.com/users/gitster/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/gitster/subscriptions",
+          "type": "User",
+          "url": "https://api.github.com/users/gitster",
+          "user_view_type": "public"
+        },
+        "html_url": "https://github.com/git/git/commit/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e",
+        "node_id": "C_kwDNjpbaAChmYmQyZDFlNzY1ZGE0ZDI5MzFjYWRjNGM2MmQzY2E1ZDViNTkwZTdl",
+        "parents": [
+          {
+            "html_url": "https://github.com/git/git/commit/0fd8e230f72facf64b132d7c80949a4f6334640d",
+            "sha": "0fd8e230f72facf64b132d7c80949a4f6334640d",
+            "url": "https://api.github.com/repos/git/git/commits/0fd8e230f72facf64b132d7c80949a4f6334640d"
+          }
+        ],
+        "sha": "fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e",
+        "url": "https://api.github.com/repos/git/git/commits/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e"
+      },
+      "behind_by": 470,
+      "commits": [
+        {
+          "sha": "f9cc688c324dae3f25919798b89d011127916c8b"
+        },
+        {
+          "sha": "373cff1387f28aa07cc97e0439fbe5040bc6aad3"
+        },
+        {
+          "sha": "aac425bf3cf0f366be5edc7694643e44cd3a6591"
+        },
+        {
+          "sha": "2f450ecafa2b5d71a8315b07c433106dc5f166af"
+        },
+        {
+          "sha": "c971f9a149bc3073d117418751afbd2819842fa0"
+        },
+        {
+          "sha": "6b377dabbad79da48c287efb8977fa05e8aeb010"
+        },
+        {
+          "sha": "97dd64abb6b5b37de94ca0ddff644259d91c2711"
+        },
+        {
+          "sha": "8f97e8b90bbf7c7b7a3b895de3d9cdcc764c6638"
+        },
+        {
+          "sha": "a32b0fe7844fdab1d2c0204652a2edfd0ac968a9"
+        },
+        {
+          "sha": "2e380c9af0651776b9812bdcfd18bc888479751c"
+        },
+        {
+          "sha": "30eefc1d8fe59dfc1f991ff24c7319a237cec342"
+        },
+        {
+          "sha": "7d48788d6940985fce9c9e865339505130710e34"
+        },
+        {
+          "sha": "70211a69cb0434b0d745cfad36d9cbad743ed84f"
+        },
+        {
+          "sha": "223cf5635a8c2c17677c6d667ad4175fb48530a9"
+        },
+        {
+          "sha": "7650282c390600729372660b9dd26862dcba485f"
+        },
+        {
+          "sha": "0a7644f873082ff56c782956e1249af4d85f00b7"
+        },
+        {
+          "sha": "b0eca5a9f752b8af3175be275242af0c8d8b4522"
+        },
+        {
+          "sha": "506ed149aca8358645c2f9cc1207bf76e4a18f53"
+        },
+        {
+          "sha": "68fd14dfa0122b8d09f2b8dfdc41838cbd30bd5d"
+        },
+        {
+          "sha": "805d44fc893dbe1521a7eaab35c1052dd4892f4c"
+        },
+        {
+          "sha": "441863a26b5d9bdc4c9ab192b942c1100ef2fea4"
+        },
+        {
+          "sha": "097e4e705ce292baaea63e873b0902e160942775"
+        },
+        {
+          "sha": "b3589d7eac7eea7f3d650ce0600098eda914bba6"
+        },
+        {
+          "sha": "d6820095ef89fcfdce8329398000e2f9e1678057"
+        },
+        {
+          "sha": "fa4474cbb2095c538e8cbf3253b7fe1ef5e9a8cc"
+        },
+        {
+          "sha": "38709c37a00fcad0ffa33fef3bd0df99d5323500"
+        },
+        {
+          "sha": "19a836a5ca412b0243bda14eedfcbe92ed1104ad"
+        },
+        {
+          "sha": "1313175f5f5a15d927ae23c0503473e779496505"
+        },
+        {
+          "sha": "f1982b574f4b186d1e1b40e91bd3ad6562d2cb2c"
+        },
+        {
+          "sha": "816f0c6c8356892a8eadb7e4cf5bdcf5afcce153"
+        },
+        {
+          "sha": "1c0d5e15edb49970ef4a0a998d7715fe74d0b9ea"
+        },
+        {
+          "sha": "9587288686871b692a8cf4ff1fc6c6b24b8c4417"
+        },
+        {
+          "sha": "27c6bf4826c97e0db6ecb6ed375b7cc042f38ec7"
+        },
+        {
+          "sha": "0ca9e0b40103de1c53e423b709a9a1a0e76f6dcc"
+        },
+        {
+          "sha": "fa71b0fcda832df7b0e4e4552b5c26efa93bd657"
+        },
+        {
+          "sha": "2471f3d0ba5234992dcd5115bfb98f60e976fa34"
+        },
+        {
+          "sha": "c648f6a73e3d80e305a72dc597c5347168ad0e8d"
+        },
+        {
+          "sha": "c5de634484b59d2a4f50297ce5a1f918ae15b577"
+        },
+        {
+          "sha": "660a18eac3544981682566c616d6e57d493c9b54"
+        },
+        {
+          "sha": "9d69823284525eab86b9e774d81b74d58987aa18"
+        },
+        {
+          "sha": "bab1b0b1c38c40bfb3666632d1b7f399aa30901d"
+        },
+        {
+          "sha": "ddf35323f894ce3adc6df9660feaa82aaec899f3"
+        },
+        {
+          "sha": "f1d6c0c1dac4069a6296b9a8a3287f3a4c87e014"
+        },
+        {
+          "sha": "f7ca04903b0646d9420c28815e8911859caee6ac"
+        },
+        {
+          "sha": "c76b4eb2dc4cb10c91e75f2bc8c2110d2714d6f3"
+        },
+        {
+          "sha": "3ba3d80e9c04f5c362691eddc7450ad93ff0b98e"
+        },
+        {
+          "sha": "bba4a74cfbeb094fb191145924abf23bec37789b"
+        },
+        {
+          "sha": "17602ae8b171167c2bd3ff2186f50304cf8a8976"
+        },
+        {
+          "sha": "f3ccbc889801eda886e7b89bc704055ed45b661d"
+        },
+        {
+          "sha": "9b4fb53d981947a2c71c9100285b1826d9ebff53"
+        },
+        {
+          "sha": "ea9d7370e0a168065618dea6db4606cfa510ad92"
+        },
+        {
+          "sha": "8e22e4cd9de8e668d529115bbce4037289832423"
+        },
+        {
+          "sha": "6fb51aa1e1d9b07e9361b27abd6353c11b6decf4"
+        },
+        {
+          "sha": "81c3417ebd97ea5b4c9855cc72ba5ff1428b5376"
+        },
+        {
+          "sha": "2f5ac31b2948e03b1ab47ed191c94a4c333c2ec0"
+        },
+        {
+          "sha": "4872dd437d4a7a1f26d20727f7f9055b53644afa"
+        },
+        {
+          "sha": "f552c7936f65fd3aaac389c12cb64d7ae0f3be35"
+        },
+        {
+          "sha": "35f217e723bc51bed49a514c458cc0b681f51e1f"
+        },
+        {
+          "sha": "cc5fef6c5ca57bf4f2583fc729e44f4736f63d40"
+        },
+        {
+          "sha": "3035de12e12773b12990714227f9c039e2e46000"
+        },
+        {
+          "sha": "a6c40edf15193c9794c0f7cab92bedbc33dbd45f"
+        },
+        {
+          "sha": "35cb99bc48a8b8ab99fe9f1040c935e81d758141"
+        },
+        {
+          "sha": "2e2be8352d9f6b0a752e967ce1d6a13d4eca9e6f"
+        },
+        {
+          "sha": "437c61827114ce2fdf29414233ec7ef77a9d2530"
+        },
+        {
+          "sha": "d5ac321b77fcdeeffdfb7ba8e4d4753ce7e26fd7"
+        },
+        {
+          "sha": "25c0497f7d60e0391ec2bb27bdc7f222af5b7fd9"
+        },
+        {
+          "sha": "4975beb854eccab4339292b0681ae1e7c2f0a78d"
+        },
+        {
+          "sha": "1397409860cd48edf22270a8b97c2a3aed21bbc0"
+        },
+        {
+          "sha": "4dbbb0430ac03c5217f741f252d6efb77cd41f43"
+        },
+        {
+          "sha": "34979e168042ab372566300a014af1d11240dc9b"
+        },
+        {
+          "sha": "8d704f85c6b7ae0fcebf35c85849b539a29c2a48"
+        },
+        {
+          "sha": "f0f7ab0b68e59a793aae837fddcefd138e932ad3"
+        },
+        {
+          "sha": "88bc88c5d47b503d0708dce822d7eec1b6140f69"
+        },
+        {
+          "sha": "0dc3b5c0224b985e48be513330f8d79e87db9a12"
+        },
+        {
+          "sha": "15b2d49c4d7920efcbf4baa2fa85b3d0836062b9"
+        },
+        {
+          "sha": "b371db812524aa7831d3c3a9aed782defd1dcfb2"
+        },
+        {
+          "sha": "47010ab85a1036e267574937f8189186554669f8"
+        },
+        {
+          "sha": "29411cf59fd417d8fce1be40ab2911e3e0885f26"
+        },
+        {
+          "sha": "288266c11d91a01239e8e17f4bd90f1276e30030"
+        },
+        {
+          "sha": "55c54fd375849d303ab71307fc8f79254877cc89"
+        },
+        {
+          "sha": "8cb7e2e031978c59381adf086fd1c0ce1e3a7315"
+        },
+        {
+          "sha": "90e3d614635178e1f97c2d1d6d53734e3d75b774"
+        },
+        {
+          "sha": "fd48e6f35621ebd4657acb4a74d8638466a4dbbc"
+        },
+        {
+          "sha": "b1313872cefef5704a0acff14b7c0869a9d5dc7c"
+        },
+        {
+          "sha": "dee1bb2a9fc75c3a1f7f1c6aaf86ff2c038bd436"
+        },
+        {
+          "sha": "aff587222342473034a270a3a04cfb1eba0a1117"
+        },
+        {
+          "sha": "f357b9c2c77eae1a1d37dfa44c1dda53f532a82a"
+        },
+        {
+          "sha": "d95c4e9aa13d78e2954417db930293c6b05cb7a6"
+        },
+        {
+          "sha": "df246839249110b852848db70501296d99bf1d7d"
+        },
+        {
+          "sha": "1c93cc03eaed7d3e830864c502aae49551421fd2"
+        },
+        {
+          "sha": "aaa715dbf8aef2feec550f232c22ceeaf4b0df47"
+        },
+        {
+          "sha": "8e02c245c26d3cceccaa1b4e61daea197f1e82c8"
+        },
+        {
+          "sha": "dbd758da93f9762f1aab93891e44a3be8f860cd2"
+        },
+        {
+          "sha": "e2107ead4bf1d9a0e77d64369fdd2934f83b7e4f"
+        },
+        {
+          "sha": "0ef7d3885698a14aff41e71baf6c5516346b68e8"
+        },
+        {
+          "sha": "b1914252837cffc9055327540cfd115fc1e69e61"
+        },
+        {
+          "sha": "fdf16f5ae6c0f150d9b91d2a25c18360fb0f05a2"
+        },
+        {
+          "sha": "36233b21ea1c302d882b384c5e882cad93243f3c"
+        },
+        {
+          "sha": "caaf0e8c88e878fa535c26dd280d29974a9c454a"
+        },
+        {
+          "sha": "af11f8f7b2217c3dffef4b3952042b8e44b60752"
+        },
+        {
+          "sha": "531ed4b8347ea634c6a6a79cbed0c0cc775ae187"
+        },
+        {
+          "sha": "9b5d89cb34a810681f8ccfe58e71fbc00e241324"
+        },
+        {
+          "sha": "331d31637c609ca1eca73f8d8acac39c7a31e24d"
+        },
+        {
+          "sha": "60e1db69c2388b573056bdab982c5f78933cbc92"
+        },
+        {
+          "sha": "fb03a4d5fa0cc09bc682447ea1cd90f1e60be62e"
+        },
+        {
+          "sha": "6deb61fae1985f19a96405ca4e5710a01f29b7d2"
+        },
+        {
+          "sha": "3786886f66b93b179b295eef6be650263d21fe2f"
+        },
+        {
+          "sha": "57d150529c092dc92e072f54ce0b7e676ee76f7c"
+        },
+        {
+          "sha": "2b50a97225c9fa937c4160f7da5132e880fa500f"
+        },
+        {
+          "sha": "19bcf62ed0597b7487c3f4ed2de3c9d97b921de8"
+        },
+        {
+          "sha": "89048b48fb3acc7b24e38c42139b3a03fa54e09f"
+        },
+        {
+          "sha": "74fe079482062f1df7c2b8dfa50950838d8fc19e"
+        },
+        {
+          "sha": "9adf7ae7cde5e8ecc231aed2320951acb5b1db91"
+        },
+        {
+          "sha": "ac9e576dc2d3801f5812620a6445eec41fa83e47"
+        },
+        {
+          "sha": "dcb6cee7fbe72a181a8f2064ab5edb9ddf4af723"
+        },
+        {
+          "sha": "ce5664b1148026fb61463becffe610846ec50411"
+        },
+        {
+          "sha": "56332d1945e81bf0745a1e4544f9d23e975bfa93"
+        },
+        {
+          "sha": "6eda5d6312ddc3a6324c82fe898309ca41e4e1ee"
+        },
+        {
+          "sha": "c5dabd6987d121f2e50ab451aeef4c80ac2a9058"
+        },
+        {
+          "sha": "c00cb3f8c68583e8ec5047aaeb6b6a8dc8973ef8"
+        },
+        {
+          "sha": "ed7e96191f58aec5c7778b8de35e1cc955b353f5"
+        },
+        {
+          "sha": "0046ddd9f1d91e094e09d0a6fa818d8a34cdd4f5"
+        },
+        {
+          "sha": "9291f4cfbfb53956ddd8a041acab08be2b2d62f4"
+        },
+        {
+          "sha": "fd208b6e8175d73fdb695218e89bd5d334ffb017"
+        },
+        {
+          "sha": "c060ae533689be0c9f3520f9258a0a2641e64f37"
+        },
+        {
+          "sha": "e589305c1be0b3385184425a4cf7f6ca8ddbf5bc"
+        },
+        {
+          "sha": "03b41523c576f26ad34085378717a0c1b287470f"
+        }
+      ],
+      "diff_url": "https://github.com/git/git/compare/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e...03b41523c576f26ad34085378717a0c1b287470f.diff",
+      "html_url": "https://github.com/git/git/compare/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e...03b41523c576f26ad34085378717a0c1b287470f",
+      "merge_base_commit": {
+        "author": {
+          "avatar_url": "https://avatars.githubusercontent.com/u/54884?v=4",
+          "events_url": "https://api.github.com/users/gitster/events{/privacy}",
+          "followers_url": "https://api.github.com/users/gitster/followers",
+          "following_url": "https://api.github.com/users/gitster/following{/other_user}",
+          "gists_url": "https://api.github.com/users/gitster/gists{/gist_id}",
+          "gravatar_id": "",
+          "html_url": "https://github.com/gitster",
+          "id": 54884,
+          "login": "gitster",
+          "node_id": "MDQ6VXNlcjU0ODg0",
+          "organizations_url": "https://api.github.com/users/gitster/orgs",
+          "received_events_url": "https://api.github.com/users/gitster/received_events",
+          "repos_url": "https://api.github.com/users/gitster/repos",
+          "site_admin": false,
+          "starred_url": "https://api.github.com/users/gitster/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/gitster/subscriptions",
+          "type": "User",
+          "url": "https://api.github.com/users/gitster",
+          "user_view_type": "public"
+        },
+        "comments_url": "https://api.github.com/repos/git/git/commits/a018953688f1b10bddf91bff8747068f5f4746a4/comments",
+        "commit": {
+          "author": {
+            "date": "2026-09-28T04:20:04Z",
+            "email": "gitster@pobox.com",
+            "name": "Junio C Hamano"
+          },
+          "comment_count": 0,
+          "committer": {
+            "date": "2026-09-28T04:20:04Z",
+            "email": "gitster@pobox.com",
+            "name": "Junio C Hamano"
+          },
+          "message": "Git 2.56\n\nSigned-off-by: Junio C Hamano <gitster@pobox.com>",
+          "tree": {
+            "sha": "96aa7b9f343426cd28cf6c2da737b9f847a2919d",
+            "url": "https://api.github.com/repos/git/git/git/trees/96aa7b9f343426cd28cf6c2da737b9f847a2919d"
+          },
+          "url": "https://api.github.com/repos/git/git/git/commits/a018953688f1b10bddf91bff8747068f5f4746a4",
+          "verification": {
+            "payload": null,
+            "reason": "unsigned",
+            "signature": null,
+            "verified": false,
+            "verified_at": null
+          }
+        },
+        "committer": {
+          "avatar_url": "https://avatars.githubusercontent.com/u/54884?v=4",
+          "events_url": "https://api.github.com/users/gitster/events{/privacy}",
+          "followers_url": "https://api.github.com/users/gitster/followers",
+          "following_url": "https://api.github.com/users/gitster/following{/other_user}",
+          "gists_url": "https://api.github.com/users/gitster/gists{/gist_id}",
+          "gravatar_id": "",
+          "html_url": "https://github.com/gitster",
+          "id": 54884,
+          "login": "gitster",
+          "node_id": "MDQ6VXNlcjU0ODg0",
+          "organizations_url": "https://api.github.com/users/gitster/orgs",
+          "received_events_url": "https://api.github.com/users/gitster/received_events",
+          "repos_url": "https://api.github.com/users/gitster/repos",
+          "site_admin": false,
+          "starred_url": "https://api.github.com/users/gitster/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/gitster/subscriptions",
+          "type": "User",
+          "url": "https://api.github.com/users/gitster",
+          "user_view_type": "public"
+        },
+        "html_url": "https://github.com/git/git/commit/a018953688f1b10bddf91bff8747068f5f4746a4",
+        "node_id": "C_kwDNjpbaAChhMDE4OTUzNjg4ZjFiMTBiZGRmOTFiZmY4NzQ3MDY4ZjVmNDc0NmE0",
+        "parents": [
+          {
+            "html_url": "https://github.com/git/git/commit/34f06850c16c7f7ac822b1adc71354f11b0f2ca3",
+            "sha": "34f06850c16c7f7ac822b1adc71354f11b0f2ca3",
+            "url": "https://api.github.com/repos/git/git/commits/34f06850c16c7f7ac822b1adc71354f11b0f2ca3"
+          }
+        ],
+        "sha": "a018953688f1b10bddf91bff8747068f5f4746a4",
+        "url": "https://api.github.com/repos/git/git/commits/a018953688f1b10bddf91bff8747068f5f4746a4"
+      },
+      "patch_url": "https://github.com/git/git/compare/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e...03b41523c576f26ad34085378717a0c1b287470f.patch",
+      "permalink_url": "https://github.com/git/git/compare/git:fbd2d1e...git:03b4152",
+      "status": "diverged",
+      "total_commits": 127,
+      "url": "https://api.github.com/repos/git/git/compare/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e...03b41523c576f26ad34085378717a0c1b287470f"
+    },
+    "BL": {
+      "ahead_by": 128,
+      "base_commit": {
+        "author": {
+          "avatar_url": "https://avatars.githubusercontent.com/u/54884?v=4",
+          "events_url": "https://api.github.com/users/gitster/events{/privacy}",
+          "followers_url": "https://api.github.com/users/gitster/followers",
+          "following_url": "https://api.github.com/users/gitster/following{/other_user}",
+          "gists_url": "https://api.github.com/users/gitster/gists{/gist_id}",
+          "gravatar_id": "",
+          "html_url": "https://github.com/gitster",
+          "id": 54884,
+          "login": "gitster",
+          "node_id": "MDQ6VXNlcjU0ODg0",
+          "organizations_url": "https://api.github.com/users/gitster/orgs",
+          "received_events_url": "https://api.github.com/users/gitster/received_events",
+          "repos_url": "https://api.github.com/users/gitster/repos",
+          "site_admin": false,
+          "starred_url": "https://api.github.com/users/gitster/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/gitster/subscriptions",
+          "type": "User",
+          "url": "https://api.github.com/users/gitster",
+          "user_view_type": "public"
+        },
+        "comments_url": "https://api.github.com/repos/git/git/commits/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e/comments",
+        "commit": {
+          "author": {
+            "date": "2026-11-09T22:50:55Z",
+            "email": "gitster@pobox.com",
+            "name": "Junio C Hamano"
+          },
+          "comment_count": 0,
+          "committer": {
+            "date": "2026-11-09T22:50:55Z",
+            "email": "gitster@pobox.com",
+            "name": "Junio C Hamano"
+          },
+          "message": "The 18th batch\n\nSigned-off-by: Junio C Hamano <gitster@pobox.com>",
+          "tree": {
+            "sha": "c8c3560befc757259ee25259fe274c5c3811d987",
+            "url": "https://api.github.com/repos/git/git/git/trees/c8c3560befc757259ee25259fe274c5c3811d987"
+          },
+          "url": "https://api.github.com/repos/git/git/git/commits/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e",
+          "verification": {
+            "payload": null,
+            "reason": "unsigned",
+            "signature": null,
+            "verified": false,
+            "verified_at": null
+          }
+        },
+        "committer": {
+          "avatar_url": "https://avatars.githubusercontent.com/u/54884?v=4",
+          "events_url": "https://api.github.com/users/gitster/events{/privacy}",
+          "followers_url": "https://api.github.com/users/gitster/followers",
+          "following_url": "https://api.github.com/users/gitster/following{/other_user}",
+          "gists_url": "https://api.github.com/users/gitster/gists{/gist_id}",
+          "gravatar_id": "",
+          "html_url": "https://github.com/gitster",
+          "id": 54884,
+          "login": "gitster",
+          "node_id": "MDQ6VXNlcjU0ODg0",
+          "organizations_url": "https://api.github.com/users/gitster/orgs",
+          "received_events_url": "https://api.github.com/users/gitster/received_events",
+          "repos_url": "https://api.github.com/users/gitster/repos",
+          "site_admin": false,
+          "starred_url": "https://api.github.com/users/gitster/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/gitster/subscriptions",
+          "type": "User",
+          "url": "https://api.github.com/users/gitster",
+          "user_view_type": "public"
+        },
+        "html_url": "https://github.com/git/git/commit/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e",
+        "node_id": "C_kwDNjpbaAChmYmQyZDFlNzY1ZGE0ZDI5MzFjYWRjNGM2MmQzY2E1ZDViNTkwZTdl",
+        "parents": [
+          {
+            "html_url": "https://github.com/git/git/commit/0fd8e230f72facf64b132d7c80949a4f6334640d",
+            "sha": "0fd8e230f72facf64b132d7c80949a4f6334640d",
+            "url": "https://api.github.com/repos/git/git/commits/0fd8e230f72facf64b132d7c80949a4f6334640d"
+          }
+        ],
+        "sha": "fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e",
+        "url": "https://api.github.com/repos/git/git/commits/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e"
+      },
+      "behind_by": 0,
+      "commits": [
+        {
+          "sha": "f9cc688c324dae3f25919798b89d011127916c8b"
+        },
+        {
+          "sha": "373cff1387f28aa07cc97e0439fbe5040bc6aad3"
+        },
+        {
+          "sha": "aac425bf3cf0f366be5edc7694643e44cd3a6591"
+        },
+        {
+          "sha": "2f450ecafa2b5d71a8315b07c433106dc5f166af"
+        },
+        {
+          "sha": "c971f9a149bc3073d117418751afbd2819842fa0"
+        },
+        {
+          "sha": "6b377dabbad79da48c287efb8977fa05e8aeb010"
+        },
+        {
+          "sha": "97dd64abb6b5b37de94ca0ddff644259d91c2711"
+        },
+        {
+          "sha": "8f97e8b90bbf7c7b7a3b895de3d9cdcc764c6638"
+        },
+        {
+          "sha": "a32b0fe7844fdab1d2c0204652a2edfd0ac968a9"
+        },
+        {
+          "sha": "2e380c9af0651776b9812bdcfd18bc888479751c"
+        },
+        {
+          "sha": "30eefc1d8fe59dfc1f991ff24c7319a237cec342"
+        },
+        {
+          "sha": "7d48788d6940985fce9c9e865339505130710e34"
+        },
+        {
+          "sha": "70211a69cb0434b0d745cfad36d9cbad743ed84f"
+        },
+        {
+          "sha": "223cf5635a8c2c17677c6d667ad4175fb48530a9"
+        },
+        {
+          "sha": "7650282c390600729372660b9dd26862dcba485f"
+        },
+        {
+          "sha": "0a7644f873082ff56c782956e1249af4d85f00b7"
+        },
+        {
+          "sha": "b0eca5a9f752b8af3175be275242af0c8d8b4522"
+        },
+        {
+          "sha": "506ed149aca8358645c2f9cc1207bf76e4a18f53"
+        },
+        {
+          "sha": "68fd14dfa0122b8d09f2b8dfdc41838cbd30bd5d"
+        },
+        {
+          "sha": "805d44fc893dbe1521a7eaab35c1052dd4892f4c"
+        },
+        {
+          "sha": "441863a26b5d9bdc4c9ab192b942c1100ef2fea4"
+        },
+        {
+          "sha": "097e4e705ce292baaea63e873b0902e160942775"
+        },
+        {
+          "sha": "b3589d7eac7eea7f3d650ce0600098eda914bba6"
+        },
+        {
+          "sha": "d6820095ef89fcfdce8329398000e2f9e1678057"
+        },
+        {
+          "sha": "fa4474cbb2095c538e8cbf3253b7fe1ef5e9a8cc"
+        },
+        {
+          "sha": "38709c37a00fcad0ffa33fef3bd0df99d5323500"
+        },
+        {
+          "sha": "19a836a5ca412b0243bda14eedfcbe92ed1104ad"
+        },
+        {
+          "sha": "1313175f5f5a15d927ae23c0503473e779496505"
+        },
+        {
+          "sha": "f1982b574f4b186d1e1b40e91bd3ad6562d2cb2c"
+        },
+        {
+          "sha": "816f0c6c8356892a8eadb7e4cf5bdcf5afcce153"
+        },
+        {
+          "sha": "1c0d5e15edb49970ef4a0a998d7715fe74d0b9ea"
+        },
+        {
+          "sha": "9587288686871b692a8cf4ff1fc6c6b24b8c4417"
+        },
+        {
+          "sha": "27c6bf4826c97e0db6ecb6ed375b7cc042f38ec7"
+        },
+        {
+          "sha": "0ca9e0b40103de1c53e423b709a9a1a0e76f6dcc"
+        },
+        {
+          "sha": "fa71b0fcda832df7b0e4e4552b5c26efa93bd657"
+        },
+        {
+          "sha": "2471f3d0ba5234992dcd5115bfb98f60e976fa34"
+        },
+        {
+          "sha": "c648f6a73e3d80e305a72dc597c5347168ad0e8d"
+        },
+        {
+          "sha": "c5de634484b59d2a4f50297ce5a1f918ae15b577"
+        },
+        {
+          "sha": "660a18eac3544981682566c616d6e57d493c9b54"
+        },
+        {
+          "sha": "9d69823284525eab86b9e774d81b74d58987aa18"
+        },
+        {
+          "sha": "bab1b0b1c38c40bfb3666632d1b7f399aa30901d"
+        },
+        {
+          "sha": "ddf35323f894ce3adc6df9660feaa82aaec899f3"
+        },
+        {
+          "sha": "f1d6c0c1dac4069a6296b9a8a3287f3a4c87e014"
+        },
+        {
+          "sha": "f7ca04903b0646d9420c28815e8911859caee6ac"
+        },
+        {
+          "sha": "c76b4eb2dc4cb10c91e75f2bc8c2110d2714d6f3"
+        },
+        {
+          "sha": "3ba3d80e9c04f5c362691eddc7450ad93ff0b98e"
+        },
+        {
+          "sha": "bba4a74cfbeb094fb191145924abf23bec37789b"
+        },
+        {
+          "sha": "17602ae8b171167c2bd3ff2186f50304cf8a8976"
+        },
+        {
+          "sha": "f3ccbc889801eda886e7b89bc704055ed45b661d"
+        },
+        {
+          "sha": "9b4fb53d981947a2c71c9100285b1826d9ebff53"
+        },
+        {
+          "sha": "ea9d7370e0a168065618dea6db4606cfa510ad92"
+        },
+        {
+          "sha": "8e22e4cd9de8e668d529115bbce4037289832423"
+        },
+        {
+          "sha": "6fb51aa1e1d9b07e9361b27abd6353c11b6decf4"
+        },
+        {
+          "sha": "81c3417ebd97ea5b4c9855cc72ba5ff1428b5376"
+        },
+        {
+          "sha": "2f5ac31b2948e03b1ab47ed191c94a4c333c2ec0"
+        },
+        {
+          "sha": "4872dd437d4a7a1f26d20727f7f9055b53644afa"
+        },
+        {
+          "sha": "f552c7936f65fd3aaac389c12cb64d7ae0f3be35"
+        },
+        {
+          "sha": "35f217e723bc51bed49a514c458cc0b681f51e1f"
+        },
+        {
+          "sha": "cc5fef6c5ca57bf4f2583fc729e44f4736f63d40"
+        },
+        {
+          "sha": "3035de12e12773b12990714227f9c039e2e46000"
+        },
+        {
+          "sha": "a6c40edf15193c9794c0f7cab92bedbc33dbd45f"
+        },
+        {
+          "sha": "35cb99bc48a8b8ab99fe9f1040c935e81d758141"
+        },
+        {
+          "sha": "2e2be8352d9f6b0a752e967ce1d6a13d4eca9e6f"
+        },
+        {
+          "sha": "437c61827114ce2fdf29414233ec7ef77a9d2530"
+        },
+        {
+          "sha": "d5ac321b77fcdeeffdfb7ba8e4d4753ce7e26fd7"
+        },
+        {
+          "sha": "25c0497f7d60e0391ec2bb27bdc7f222af5b7fd9"
+        },
+        {
+          "sha": "4975beb854eccab4339292b0681ae1e7c2f0a78d"
+        },
+        {
+          "sha": "1397409860cd48edf22270a8b97c2a3aed21bbc0"
+        },
+        {
+          "sha": "4dbbb0430ac03c5217f741f252d6efb77cd41f43"
+        },
+        {
+          "sha": "34979e168042ab372566300a014af1d11240dc9b"
+        },
+        {
+          "sha": "8d704f85c6b7ae0fcebf35c85849b539a29c2a48"
+        },
+        {
+          "sha": "f0f7ab0b68e59a793aae837fddcefd138e932ad3"
+        },
+        {
+          "sha": "88bc88c5d47b503d0708dce822d7eec1b6140f69"
+        },
+        {
+          "sha": "0dc3b5c0224b985e48be513330f8d79e87db9a12"
+        },
+        {
+          "sha": "15b2d49c4d7920efcbf4baa2fa85b3d0836062b9"
+        },
+        {
+          "sha": "b371db812524aa7831d3c3a9aed782defd1dcfb2"
+        },
+        {
+          "sha": "47010ab85a1036e267574937f8189186554669f8"
+        },
+        {
+          "sha": "29411cf59fd417d8fce1be40ab2911e3e0885f26"
+        },
+        {
+          "sha": "288266c11d91a01239e8e17f4bd90f1276e30030"
+        },
+        {
+          "sha": "55c54fd375849d303ab71307fc8f79254877cc89"
+        },
+        {
+          "sha": "8cb7e2e031978c59381adf086fd1c0ce1e3a7315"
+        },
+        {
+          "sha": "90e3d614635178e1f97c2d1d6d53734e3d75b774"
+        },
+        {
+          "sha": "fd48e6f35621ebd4657acb4a74d8638466a4dbbc"
+        },
+        {
+          "sha": "b1313872cefef5704a0acff14b7c0869a9d5dc7c"
+        },
+        {
+          "sha": "dee1bb2a9fc75c3a1f7f1c6aaf86ff2c038bd436"
+        },
+        {
+          "sha": "aff587222342473034a270a3a04cfb1eba0a1117"
+        },
+        {
+          "sha": "f357b9c2c77eae1a1d37dfa44c1dda53f532a82a"
+        },
+        {
+          "sha": "d95c4e9aa13d78e2954417db930293c6b05cb7a6"
+        },
+        {
+          "sha": "df246839249110b852848db70501296d99bf1d7d"
+        },
+        {
+          "sha": "1c93cc03eaed7d3e830864c502aae49551421fd2"
+        },
+        {
+          "sha": "aaa715dbf8aef2feec550f232c22ceeaf4b0df47"
+        },
+        {
+          "sha": "8e02c245c26d3cceccaa1b4e61daea197f1e82c8"
+        },
+        {
+          "sha": "dbd758da93f9762f1aab93891e44a3be8f860cd2"
+        },
+        {
+          "sha": "e2107ead4bf1d9a0e77d64369fdd2934f83b7e4f"
+        },
+        {
+          "sha": "0ef7d3885698a14aff41e71baf6c5516346b68e8"
+        },
+        {
+          "sha": "b1914252837cffc9055327540cfd115fc1e69e61"
+        },
+        {
+          "sha": "fdf16f5ae6c0f150d9b91d2a25c18360fb0f05a2"
+        },
+        {
+          "sha": "36233b21ea1c302d882b384c5e882cad93243f3c"
+        },
+        {
+          "sha": "caaf0e8c88e878fa535c26dd280d29974a9c454a"
+        },
+        {
+          "sha": "af11f8f7b2217c3dffef4b3952042b8e44b60752"
+        },
+        {
+          "sha": "531ed4b8347ea634c6a6a79cbed0c0cc775ae187"
+        },
+        {
+          "sha": "9b5d89cb34a810681f8ccfe58e71fbc00e241324"
+        },
+        {
+          "sha": "331d31637c609ca1eca73f8d8acac39c7a31e24d"
+        },
+        {
+          "sha": "60e1db69c2388b573056bdab982c5f78933cbc92"
+        },
+        {
+          "sha": "fb03a4d5fa0cc09bc682447ea1cd90f1e60be62e"
+        },
+        {
+          "sha": "6deb61fae1985f19a96405ca4e5710a01f29b7d2"
+        },
+        {
+          "sha": "3786886f66b93b179b295eef6be650263d21fe2f"
+        },
+        {
+          "sha": "57d150529c092dc92e072f54ce0b7e676ee76f7c"
+        },
+        {
+          "sha": "2b50a97225c9fa937c4160f7da5132e880fa500f"
+        },
+        {
+          "sha": "19bcf62ed0597b7487c3f4ed2de3c9d97b921de8"
+        },
+        {
+          "sha": "89048b48fb3acc7b24e38c42139b3a03fa54e09f"
+        },
+        {
+          "sha": "74fe079482062f1df7c2b8dfa50950838d8fc19e"
+        },
+        {
+          "sha": "9adf7ae7cde5e8ecc231aed2320951acb5b1db91"
+        },
+        {
+          "sha": "ac9e576dc2d3801f5812620a6445eec41fa83e47"
+        },
+        {
+          "sha": "dcb6cee7fbe72a181a8f2064ab5edb9ddf4af723"
+        },
+        {
+          "sha": "ce5664b1148026fb61463becffe610846ec50411"
+        },
+        {
+          "sha": "56332d1945e81bf0745a1e4544f9d23e975bfa93"
+        },
+        {
+          "sha": "6eda5d6312ddc3a6324c82fe898309ca41e4e1ee"
+        },
+        {
+          "sha": "c5dabd6987d121f2e50ab451aeef4c80ac2a9058"
+        },
+        {
+          "sha": "c00cb3f8c68583e8ec5047aaeb6b6a8dc8973ef8"
+        },
+        {
+          "sha": "ed7e96191f58aec5c7778b8de35e1cc955b353f5"
+        },
+        {
+          "sha": "0046ddd9f1d91e094e09d0a6fa818d8a34cdd4f5"
+        },
+        {
+          "sha": "9291f4cfbfb53956ddd8a041acab08be2b2d62f4"
+        },
+        {
+          "sha": "fd208b6e8175d73fdb695218e89bd5d334ffb017"
+        },
+        {
+          "sha": "c060ae533689be0c9f3520f9258a0a2641e64f37"
+        },
+        {
+          "sha": "e589305c1be0b3385184425a4cf7f6ca8ddbf5bc"
+        },
+        {
+          "sha": "03b41523c576f26ad34085378717a0c1b287470f"
+        },
+        {
+          "sha": "1891de46f79dc444a47db1c87bd0c8c76b5463f2"
+        }
+      ],
+      "diff_url": "https://github.com/git/git/compare/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e...1891de46f79dc444a47db1c87bd0c8c76b5463f2.diff",
+      "html_url": "https://github.com/git/git/compare/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e...1891de46f79dc444a47db1c87bd0c8c76b5463f2",
+      "merge_base_commit": {
+        "author": {
+          "avatar_url": "https://avatars.githubusercontent.com/u/54884?v=4",
+          "events_url": "https://api.github.com/users/gitster/events{/privacy}",
+          "followers_url": "https://api.github.com/users/gitster/followers",
+          "following_url": "https://api.github.com/users/gitster/following{/other_user}",
+          "gists_url": "https://api.github.com/users/gitster/gists{/gist_id}",
+          "gravatar_id": "",
+          "html_url": "https://github.com/gitster",
+          "id": 54884,
+          "login": "gitster",
+          "node_id": "MDQ6VXNlcjU0ODg0",
+          "organizations_url": "https://api.github.com/users/gitster/orgs",
+          "received_events_url": "https://api.github.com/users/gitster/received_events",
+          "repos_url": "https://api.github.com/users/gitster/repos",
+          "site_admin": false,
+          "starred_url": "https://api.github.com/users/gitster/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/gitster/subscriptions",
+          "type": "User",
+          "url": "https://api.github.com/users/gitster",
+          "user_view_type": "public"
+        },
+        "comments_url": "https://api.github.com/repos/git/git/commits/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e/comments",
+        "commit": {
+          "author": {
+            "date": "2026-11-09T22:50:55Z",
+            "email": "gitster@pobox.com",
+            "name": "Junio C Hamano"
+          },
+          "comment_count": 0,
+          "committer": {
+            "date": "2026-11-09T22:50:55Z",
+            "email": "gitster@pobox.com",
+            "name": "Junio C Hamano"
+          },
+          "message": "The 18th batch\n\nSigned-off-by: Junio C Hamano <gitster@pobox.com>",
+          "tree": {
+            "sha": "c8c3560befc757259ee25259fe274c5c3811d987",
+            "url": "https://api.github.com/repos/git/git/git/trees/c8c3560befc757259ee25259fe274c5c3811d987"
+          },
+          "url": "https://api.github.com/repos/git/git/git/commits/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e",
+          "verification": {
+            "payload": null,
+            "reason": "unsigned",
+            "signature": null,
+            "verified": false,
+            "verified_at": null
+          }
+        },
+        "committer": {
+          "avatar_url": "https://avatars.githubusercontent.com/u/54884?v=4",
+          "events_url": "https://api.github.com/users/gitster/events{/privacy}",
+          "followers_url": "https://api.github.com/users/gitster/followers",
+          "following_url": "https://api.github.com/users/gitster/following{/other_user}",
+          "gists_url": "https://api.github.com/users/gitster/gists{/gist_id}",
+          "gravatar_id": "",
+          "html_url": "https://github.com/gitster",
+          "id": 54884,
+          "login": "gitster",
+          "node_id": "MDQ6VXNlcjU0ODg0",
+          "organizations_url": "https://api.github.com/users/gitster/orgs",
+          "received_events_url": "https://api.github.com/users/gitster/received_events",
+          "repos_url": "https://api.github.com/users/gitster/repos",
+          "site_admin": false,
+          "starred_url": "https://api.github.com/users/gitster/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/gitster/subscriptions",
+          "type": "User",
+          "url": "https://api.github.com/users/gitster",
+          "user_view_type": "public"
+        },
+        "html_url": "https://github.com/git/git/commit/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e",
+        "node_id": "C_kwDNjpbaAChmYmQyZDFlNzY1ZGE0ZDI5MzFjYWRjNGM2MmQzY2E1ZDViNTkwZTdl",
+        "parents": [
+          {
+            "html_url": "https://github.com/git/git/commit/0fd8e230f72facf64b132d7c80949a4f6334640d",
+            "sha": "0fd8e230f72facf64b132d7c80949a4f6334640d",
+            "url": "https://api.github.com/repos/git/git/commits/0fd8e230f72facf64b132d7c80949a4f6334640d"
+          }
+        ],
+        "sha": "fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e",
+        "url": "https://api.github.com/repos/git/git/commits/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e"
+      },
+      "patch_url": "https://github.com/git/git/compare/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e...1891de46f79dc444a47db1c87bd0c8c76b5463f2.patch",
+      "permalink_url": "https://github.com/git/git/compare/git:fbd2d1e...git:1891de4",
+      "status": "ahead",
+      "total_commits": 128,
+      "url": "https://api.github.com/repos/git/git/compare/fbd2d1e765da4d2931cadc4c62d3ca5d5b590e7e...1891de46f79dc444a47db1c87bd0c8c76b5463f2"
+    }
+  },
+  "source": "GET repos/git/git/compare/{base}...{head} on api.github.com, 2026-11-11, read-only",
+  "trimmed": "'files' removed and each commit reduced to its 'sha'; Factory Core reads neither. Every other field is as returned."
+}
