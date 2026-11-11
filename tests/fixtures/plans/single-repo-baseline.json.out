@@ -1,0 +1,271 @@
+{
+  "artifacts": {
+    "architecture/decisions/DEC-1.md": "ac0dd12aa2e2a1a88ffc1b45ade970816231cb98738b6e9ed202ced74ef989b6",
+    "factory/profiles/tool.yaml": "c92ed8b062814aaeef5157058acc9c8d0872e8ab43d392f8649dc669725c0d13",
+    "factory/project.yaml": "f4db058240b7bfcdf1deefff8582abbb7be37ac77865a092e804992e307fa577",
+    "factory/tasks/TOOL-1.yaml": "f76d2fabce80e3d4fd082fba6764c55d140a01fa2728a02464ff55da79ab1de6",
+    "factory/tasks/TOOL-2.yaml": "9f6b74ab5aadd3bc51f64721613ef6975b1be821e5e600437c129c4cf5b90464",
+    "factory/tasks/TOOL-3.yaml": "ce25cf5a8234a4dd23c2649e6d254256bb1c3d5f013dc2f874a06e387ba575b6",
+    "requirements/config.md": "aafa009440d2b5d751cf3acc97786b79227a48ce161e1a502e97658c42d77a36",
+    "requirements/release-notes.md": "485669033e35c548cfb4589c2ee03c30ba5e6cecff3c4d405ccc333ab417d965",
+    "requirements/report.md": "7d5c39c8e93a9046b14f6fc6621df01497cc3cd9479d8c526d9a25cc63064fae"
+  },
+  "evidence": {
+    "authenticated": false,
+    "observedAt": null,
+    "provenance": "simulated"
+  },
+  "project": "solo-tool",
+  "schemaVersion": "factory.plan/v1",
+  "summary": {
+    "BLOCKED": 0,
+    "COMPLETE": 2,
+    "IN_REVIEW": 0,
+    "MERGED": 0,
+    "READY": 1,
+    "STALE": 0,
+    "UNKNOWN": 0
+  },
+  "tasks": [
+    {
+      "achievedLevel": "integration-ready",
+      "architecture": {
+        "profile": "tool-arch",
+        "profileRevision": 2,
+        "reasons": [],
+        "required": true,
+        "result": "PASS"
+      },
+      "branch": "topic/TOOL-1-r3",
+      "dependencies": [],
+      "gates": {
+        "complete": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "merge": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "openPullRequest": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "start": {
+          "reasons": [],
+          "result": "PASS"
+        }
+      },
+      "id": "TOOL-1",
+      "kind": "implementation",
+      "levels": {
+        "approved": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "environment-verified": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+              "message": "environment deployment evidence is not supported by this Factory Core version",
+              "ref": "TOOL-1",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        },
+        "integration-ready": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "merged": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "validated": {
+          "reasons": [],
+          "result": "PASS"
+        }
+      },
+      "repository": "tool",
+      "revision": 3,
+      "stale": [],
+      "state": "COMPLETE"
+    },
+    {
+      "achievedLevel": "integration-ready",
+      "architecture": {
+        "profile": "tool-arch",
+        "profileRevision": 2,
+        "reasons": [],
+        "required": true,
+        "result": "PASS"
+      },
+      "branch": "topic/TOOL-2-r1",
+      "dependencies": [
+        {
+          "dependencyLevel": "integration-ready",
+          "gate": "start",
+          "reasons": [],
+          "requires": "validated",
+          "result": "PASS",
+          "task": "TOOL-1"
+        }
+      ],
+      "gates": {
+        "complete": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "merge": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "openPullRequest": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "start": {
+          "reasons": [],
+          "result": "PASS"
+        }
+      },
+      "id": "TOOL-2",
+      "kind": "implementation",
+      "levels": {
+        "approved": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "environment-verified": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+              "message": "environment deployment evidence is not supported by this Factory Core version",
+              "ref": "TOOL-2",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        },
+        "integration-ready": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "merged": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "validated": {
+          "reasons": [],
+          "result": "PASS"
+        }
+      },
+      "repository": "tool",
+      "revision": 1,
+      "stale": [],
+      "state": "COMPLETE"
+    },
+    {
+      "achievedLevel": "approved",
+      "architecture": {
+        "profile": "tool-arch",
+        "profileRevision": 2,
+        "reasons": [],
+        "required": true,
+        "result": "PASS"
+      },
+      "branch": "topic/TOOL-3-r1",
+      "dependencies": [
+        {
+          "dependencyLevel": "integration-ready",
+          "gate": "complete",
+          "reasons": [],
+          "requires": "merged",
+          "result": "PASS",
+          "task": "TOOL-2"
+        }
+      ],
+      "gates": {
+        "complete": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "NOT_MERGED",
+                  "message": "topic/TOOL-3-r1 is not merged: no merged pull request",
+                  "ref": "topic/TOOL-3-r1",
+                  "result": "FAIL"
+                }
+              ],
+              "code": "TASK_NOT_VALIDATED",
+              "message": "task TOOL-3 has not reached 'validated'",
+              "ref": "TOOL-3",
+              "result": "FAIL"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "merge": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "openPullRequest": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "start": {
+          "reasons": [],
+          "result": "PASS"
+        }
+      },
+      "id": "TOOL-3",
+      "kind": "chore",
+      "levels": {
+        "approved": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "environment-verified": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+              "message": "environment deployment evidence is not supported by this Factory Core version",
+              "ref": "TOOL-3",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "integration-ready": {
+          "reasons": [],
+          "result": "FAIL"
+        },
+        "merged": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "NOT_MERGED",
+              "message": "topic/TOOL-3-r1 is not merged: no merged pull request",
+              "ref": "topic/TOOL-3-r1",
+              "result": "FAIL"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "validated": {
+          "reasons": [],
+          "result": "FAIL"
+        }
+      },
+      "repository": "tool",
+      "revision": 1,
+      "stale": [],
+      "state": "READY"
+    }
+  ]
+}

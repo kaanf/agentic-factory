@@ -7,8 +7,8 @@ It answers, for every task: may it start, may it open a PR, may it be merged, is
 is it safe for downstream tasks? Each answer is backed by explicit reason codes. Unknown evidence
 never counts as success.
 
-**Scope.** `validate` and `plan` read only local files. `evidence collect` makes read-only GitHub
-API requests through the GitHub CLI. Nothing dispatches agents, pushes, merges, deploys or writes to
+**Scope.** `validate` and `plan --evidence` read only local files. `evidence collect` and
+`plan --live` make read-only GitHub API requests through the GitHub CLI. Nothing dispatches agents, pushes, merges, deploys or writes to
 the project directory. No snapshot is treated as authenticated. Approvals are read from merge records,
 but human authorization is unverifiable while agents can use the approver's GitHub credentials, so no
 collected approval lets a task start.
@@ -27,6 +27,7 @@ uv run factory --help
 ```sh
 factory validate <project-dir> [--format text|json]
 factory plan <project-dir> --evidence <snapshot.json> [--format text|json]
+factory plan <project-dir> --live [--save-evidence <snapshot.json>] [--format text|json]
 factory evidence collect <project-dir> [--output <snapshot.json>]
 ```
 
@@ -39,6 +40,13 @@ levels and self-declared approval fields. Each error names the file and field.
 results, assurance levels and the reasons behind every non-PASS result. JSON output is
 byte-identical for identical inputs: keys are sorted and no timestamps are generated.
 
+`plan --live` does the same in one read-only operation: it validates the project, collects evidence
+and approval provenance from GitHub, validates that snapshot exactly as a file would be validated,
+confirms that no integration head moved, and plans. Exactly one of `--evidence` and `--live` is
+required; there is no fallback between them. A live plan is never authenticated and never makes a
+task READY while human authorization is unverifiable. See
+[live-planning.md](docs/architecture/live-planning.md).
+
 `evidence collect` reads repository, branch, pull request, commit, check-run, workflow-run and file
 data from GitHub and writes a snapshot for `plan`. It reports facts; `plan` judges them. Facts that
 cannot be collected completely are omitted and evaluate as UNKNOWN. See
@@ -49,11 +57,12 @@ and not human approval.
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Success (validate: project valid; plan: plan computed, whatever the task states; collect: every fact collected) |
-| 2 | Invalid input: project or evidence snapshot failed validation |
-| 3 | Collect: snapshot written but incomplete, or the GitHub CLI is unusable |
-| 64 | Usage error |
+| 0 | Success (validate: project valid; plan: plan computed, whatever the task states, and with `--live` every fact collected; collect: every fact collected) |
+| 2 | Invalid input: project or evidence snapshot (file or collected) failed validation |
+| 3 | Collect or `plan --live`: snapshot or plan written but incomplete (missing facts evaluate as UNKNOWN), or the GitHub CLI is unusable |
+| 64 | Usage error, including an `--output` / `--save-evidence` path inside the project or one that is a symbolic link |
 | 70 | Internal error |
+| 73 | `--output` / `--save-evidence` could not be written; the destination is unchanged |
 
 Warnings, such as an architecture profile pinning an old ADR revision, do not change the exit code.
 
@@ -86,6 +95,10 @@ Schemas: `src/factory/schemas/*.schema.json` (JSON Schema 2020-12, shipped insid
   human-authorization trust boundary.
 - [Decision 0002](docs/decisions/0002-stage2-evidence-collector.md): Stage 2 collector decisions.
 - [Decision 0003](docs/decisions/0003-stage3-approval-verification.md): Stage 3 approval decisions.
+- [Live planning](docs/architecture/live-planning.md): `plan --live`, the architecture gate end to
+  end, trust boundary, determinism and collection consistency.
+- [Decision 0004](docs/decisions/0004-stage4-live-planning.md): Stage 4 decisions.
+- [Technical debt](docs/technical-debt.md): known limitations and their classification.
 
 ## Development
 

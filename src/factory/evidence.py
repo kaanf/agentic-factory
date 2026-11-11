@@ -1,7 +1,12 @@
-"""Evidence snapshot loading and validation. The snapshot is data only; nothing here touches the network."""
+"""Evidence snapshot loading and validation. The snapshot is data only; nothing here touches the network.
+
+``parse_snapshot`` is the only way to turn a document into a ``Snapshot``: a file read by
+``load_snapshot`` and a snapshot collected in memory by ``factory plan --live`` pass the same checks.
+"""
 
 from __future__ import annotations
 
+import copy
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -75,6 +80,9 @@ class Snapshot:
     observed_at: str | None
     approvals: dict[str, Approval]
     repositories: dict[str, RepositoryFacts] = field(default_factory=dict)
+    # Audit records written by the collector, copied to the plan output and never judged.
+    collection: dict[str, Any] | None = None
+    credential_isolation: dict[str, Any] | None = None
 
     @property
     def authenticated(self) -> bool:
@@ -142,7 +150,11 @@ def load_snapshot(path: Path, project: Project) -> SnapshotResult:
         return SnapshotResult(None, [Issue(file, exc.field, exc.code, exc.message)])
     except OSError as exc:
         return SnapshotResult(None, [Issue(file, "", "UNREADABLE_FILE", f"cannot read file: {exc.strerror}")])
+    return parse_snapshot(document, project, file)
 
+
+def parse_snapshot(document: Any, project: Project, file: str) -> SnapshotResult:
+    """Validate a parsed snapshot document against the schema and the project. ``file`` names its source."""
     errors = validate_document("evidence", document, file)
     if errors:
         return SnapshotResult(None, errors)
@@ -188,5 +200,7 @@ def load_snapshot(path: Path, project: Project) -> SnapshotResult:
             for a in document["approvals"]
         },
         repositories={repo_id: _repository(raw) for repo_id, raw in document["repositories"].items()},
+        collection=copy.deepcopy(document.get("collection")),
+        credential_isolation=copy.deepcopy(document.get("credentialIsolation")),
     )
     return SnapshotResult(snapshot, [])

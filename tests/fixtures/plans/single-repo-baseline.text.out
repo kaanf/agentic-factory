@@ -1,0 +1,14 @@
+Project: solo-tool
+Evidence: simulated (NOT authenticated: approvals are not verified human approvals)
+
+TASK    REPO  STATE     LEVEL              START  OPEN-PR  MERGE  COMPLETE
+TOOL-1  tool  COMPLETE  integration-ready  PASS   PASS     PASS   PASS
+TOOL-2  tool  COMPLETE  integration-ready  PASS   PASS     PASS   PASS
+TOOL-3  tool  READY     approved           PASS   PASS     PASS   FAIL
+
+Summary: COMPLETE 2, READY 1
+
+TOOL-3 (revision 1, READY, branch topic/TOOL-3-r1)
+  complete FAIL:
+    - TASK_NOT_VALIDATED (FAIL) [TOOL-3]: task TOOL-3 has not reached 'validated'
+        - NOT_MERGED (FAIL) [topic/TOOL-3-r1]: topic/TOOL-3-r1 is not merged: no merged pull request
