@@ -63,6 +63,13 @@ jobs:
 
       # The remaining steps run in a fresh network namespace with no interfaces up,
       # so any network access fails at the operating-system level (T16).
+      - name: Prove the network namespace has no connectivity
+        run: |
+          if sudo unshare --net -- .venv/bin/python -c "import socket; socket.create_connection(('1.1.1.1', 443), timeout=5)"; then
+            echo "network unexpectedly reachable inside the namespace"; exit 1
+          fi
+          echo "confirmed: no network inside the namespace"
+
       - name: Offline acceptance suite (T1-T16, network disabled)
         run: |
           sudo unshare --net -- sudo -u "$USER" env "PATH=$PATH" "HOME=$HOME" \
