@@ -247,7 +247,7 @@ def test_evidence_duplicate_keys(cli, tmp_path: Path) -> None:  # type: ignore[n
 
 def test_evidence_schema_violations(cli, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
     def change(d: dict[str, Any]) -> None:
-        d["provenance"]["kind"] = "github"
+        d["provenance"]["kind"] = "verified"
         d["approvals"][0]["sha256"] = "short"
         d["repositories"]["svc"]["integrationHead"] = "HEAD"
         d["unexpected"] = 1

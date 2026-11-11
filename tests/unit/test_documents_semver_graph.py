@@ -153,13 +153,14 @@ def test_schema_issues_carry_field_paths() -> None:
     }
 
 
-def test_snapshot_schema_only_accepts_simulated_provenance() -> None:
-    document = {
+def test_snapshot_provenance_is_limited_to_known_kinds() -> None:
+    base = {
         "schemaVersion": "factory.evidence-snapshot/v1",
         "project": "p",
-        "provenance": {"kind": "github"},
         "approvals": [],
         "repositories": {},
     }
-    issues = validate_document("evidence", document, "s.json")
+    for kind in ("simulated", "github"):
+        assert validate_document("evidence", {**base, "provenance": {"kind": kind}}, "s.json") == []
+    issues = validate_document("evidence", {**base, "provenance": {"kind": "verified"}}, "s.json")
     assert [(i.code, i.field) for i in issues] == [("INVALID_VALUE", "provenance.kind")]

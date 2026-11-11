@@ -75,7 +75,8 @@ class Snapshot:
 
     @property
     def authenticated(self) -> bool:
-        # No provenance kind in snapshot v1 is backed by verified GitHub data.
+        # A snapshot is a local file: even one written by the GitHub collector can be edited
+        # afterwards, and approvals are not collected yet. Nothing in v1 is authenticated.
         return False
 
 

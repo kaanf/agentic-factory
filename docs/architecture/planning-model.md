@@ -123,8 +123,11 @@ Schema: `src/factory/schemas/evidence-snapshot.v1.schema.json`. Example:
 
 Rules:
 
-- `provenance.kind` accepts only `simulated` in v1. No collector exists, so no snapshot can claim to
-  be authenticated, and plan output always reports `"authenticated": false`.
+- `provenance.kind` is `simulated` (hand-written or test snapshots) or `github` (written by
+  `factory evidence collect`). Plan output always reports `"authenticated": false`: a snapshot is a
+  local file the planner cannot verify, and approvals are not collected yet.
+- The optional `collection` block (`collector`, `complete`, `errors`) is an audit record written by
+  the collector. The planner ignores it; facts that could not be collected are simply absent.
 - A branch listed with `"pullRequests": []` means "no PR exists". An unlisted branch is `UNKNOWN`.
 - An omitted commit attribute (`checkRuns`, `mergedPullRequests`, `reachableFromIntegrationHead`,
   `outputs`) is `UNKNOWN` for that attribute.

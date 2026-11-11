@@ -54,6 +54,7 @@ jobs:
           "
           .venv/bin/factory validate tests/fixtures/three-repo-project
           .venv/bin/factory validate tests/fixtures/single-repo-project
+          .venv/bin/factory validate tests/fixtures/agentic-factory-project
           for snapshot in three-repo-baseline three-repo-merged-without-push-ci; do
             .venv/bin/factory plan tests/fixtures/three-repo-project \
               --evidence "tests/fixtures/evidence/$snapshot.json" --format json > /dev/null
