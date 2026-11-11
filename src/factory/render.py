@@ -48,6 +48,16 @@ def plan_text(plan: Plan) -> str:
     lines.append(f"Evidence: {evidence['provenance']} ({authenticity})")
     if evidence["observedAt"]:
         lines.append(f"Observed at: {evidence['observedAt']}")
+    if "collection" in evidence:
+        missing = len(evidence["collection"]["errors"])
+        lines.append(
+            "Collection: complete"
+            if evidence["collection"]["complete"] and not missing
+            else f"Collection: INCOMPLETE ({missing} fact(s) could not be collected and evaluate as UNKNOWN)"
+        )
+    if "credentialIsolation" in evidence:
+        status = evidence["credentialIsolation"]["status"]
+        lines.append(f"Human authorization: unverifiable (credential isolation: {status})")
     lines.append("")
 
     header = ("TASK", "REPO", "STATE", "LEVEL", "START", "OPEN-PR", "MERGE", "COMPLETE")

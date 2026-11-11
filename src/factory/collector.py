@@ -80,6 +80,19 @@ def _json_pointer(document: Any, pointer: str) -> Any:
     return current
 
 
+def read_integration_head(api: GitHubApi, repo: Repository) -> str:
+    """The commit ``refs/heads/<integration branch>`` points to. Raises ``GitHubError``."""
+    try:
+        ref = api.get(f"repos/{repo.github}/git/ref/heads/{path_of(repo.integration_branch)}")
+        target = ref["object"]
+        if target["type"] != "commit":
+            raise GitHubError(f"refs/heads/{repo.integration_branch} does not point to a commit")
+        sha: str = target["sha"]
+        return sha
+    except (KeyError, TypeError) as exc:
+        raise GitHubError("unexpected git ref response") from exc
+
+
 class _RepositoryCollector:
     def __init__(self, api: GitHubApi, repo: Repository, tasks: list[Task], errors: list[CollectionError]) -> None:
         self.api = api
@@ -93,16 +106,9 @@ class _RepositoryCollector:
 
     def _head(self) -> str | None:
         try:
-            ref = self.api.get(f"{self.base}/git/ref/heads/{path_of(self.repo.integration_branch)}")
-            target = ref["object"]
-            if target["type"] != "commit":
-                raise GitHubError(f"refs/heads/{self.repo.integration_branch} does not point to a commit")
-            sha: str = target["sha"]
-            return sha
+            return read_integration_head(self.api, self.repo)
         except GitHubError as exc:
             self._error("integrationHead", exc)
-        except (KeyError, TypeError):
-            self._error("integrationHead", GitHubError("unexpected git ref response"))
         return None
 
     def _pull_requests(self, branch: str) -> list[dict[str, Any]] | None:

@@ -1,0 +1,66 @@
+Project: example-three
+Evidence: simulated (NOT authenticated: approvals are not verified human approvals)
+Observed at: 2026-11-11T12:00:00Z
+
+TASK              REPO    STATE     LEVEL      START    OPEN-PR  MERGE    COMPLETE
+CLIENT-DOCS-005   client  UNKNOWN   approved   UNKNOWN  PASS     UNKNOWN  FAIL
+CLIENT-INT-004    client  BLOCKED   approved   FAIL     PASS     FAIL     FAIL
+CLIENT-UI-003     client  UNKNOWN   approved   UNKNOWN  PASS     UNKNOWN  FAIL
+PLAN-SPIKE-001    plan    READY     approved   PASS     PASS     PASS     FAIL
+SVC-CONTRACT-002  svc     COMPLETE  validated  PASS     PASS     PASS     PASS
+SVC-IMPL-007      svc     MERGED    merged     PASS     PASS     PASS     UNKNOWN
+
+Summary: BLOCKED 1, COMPLETE 1, MERGED 1, READY 1, UNKNOWN 2
+
+CLIENT-DOCS-005 (revision 1, UNKNOWN, branch feat/CLIENT-DOCS-005-r1)
+  start UNKNOWN:
+    - DEP_LEVEL_UNMET (UNKNOWN) [SVC-IMPL-007]: SVC-IMPL-007 has not reached 'validated' (achieved: merged)
+        - CHECK_MISSING (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5
+    - EVIDENCE_UNKNOWN (UNKNOWN) [SVC-IMPL-007]: evidence needed to evaluate SVC-IMPL-007 is missing or inconclusive
+  complete FAIL:
+    - TASK_NOT_VALIDATED (FAIL) [CLIENT-DOCS-005]: task CLIENT-DOCS-005 has not reached 'validated'
+        - NOT_MERGED (FAIL) [feat/CLIENT-DOCS-005-r1]: feat/CLIENT-DOCS-005-r1 is not merged: no merged pull request
+
+CLIENT-INT-004 (revision 1, BLOCKED, branch feat/CLIENT-INT-004-r1)
+  start FAIL:
+    - DEP_LEVEL_UNMET (FAIL) [CLIENT-UI-003]: CLIENT-UI-003 has not reached 'merged' (achieved: approved)
+        - NOT_MERGED (FAIL) [feat/CLIENT-UI-003-r1]: feat/CLIENT-UI-003-r1 is not merged: PR #21 is open
+    - DEP_LEVEL_UNMET (UNKNOWN) [SVC-CONTRACT-002]: SVC-CONTRACT-002 has not reached 'integration-ready' (achieved: validated)
+        - HEAD_NOT_VALIDATED (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated
+            - CHECK_MISSING (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5
+    - EVIDENCE_UNKNOWN (UNKNOWN) [SVC-CONTRACT-002]: evidence needed to evaluate SVC-CONTRACT-002 is missing or inconclusive
+  merge FAIL, in addition to start:
+    - DEP_LEVEL_UNMET (UNKNOWN) [SVC-IMPL-007]: SVC-IMPL-007 has not reached 'integration-ready' (achieved: merged)
+        - CHECK_MISSING (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5
+        - HEAD_NOT_VALIDATED (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated
+            - CHECK_MISSING (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5
+    - EVIDENCE_UNKNOWN (UNKNOWN) [SVC-IMPL-007]: evidence needed to evaluate SVC-IMPL-007 is missing or inconclusive
+  complete FAIL:
+    - DEP_LEVEL_UNMET (UNKNOWN) [SVC-IMPL-007]: SVC-IMPL-007 has not reached 'environment-verified' (achieved: merged)
+        - CHECK_MISSING (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5
+        - ENVIRONMENT_EVIDENCE_UNSUPPORTED (UNKNOWN) [SVC-IMPL-007]: environment deployment evidence is not supported by this Factory Core version
+        - HEAD_NOT_VALIDATED (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated
+            - CHECK_MISSING (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5
+    - EVIDENCE_UNKNOWN (UNKNOWN) [SVC-IMPL-007]: evidence needed to evaluate SVC-IMPL-007 is missing or inconclusive
+    - TASK_NOT_VALIDATED (FAIL) [CLIENT-INT-004]: task CLIENT-INT-004 has not reached 'validated'
+        - NOT_MERGED (FAIL) [feat/CLIENT-INT-004-r1]: feat/CLIENT-INT-004-r1 is not merged: no merged pull request
+
+CLIENT-UI-003 (revision 1, UNKNOWN, branch feat/CLIENT-UI-003-r1)
+  start UNKNOWN:
+    - DEP_LEVEL_UNMET (UNKNOWN) [SVC-CONTRACT-002]: SVC-CONTRACT-002 has not reached 'integration-ready' (achieved: validated)
+        - HEAD_NOT_VALIDATED (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated
+            - CHECK_MISSING (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5
+    - EVIDENCE_UNKNOWN (UNKNOWN) [SVC-CONTRACT-002]: evidence needed to evaluate SVC-CONTRACT-002 is missing or inconclusive
+  complete FAIL:
+    - TASK_NOT_VALIDATED (FAIL) [CLIENT-UI-003]: task CLIENT-UI-003 has not reached 'validated'
+        - NOT_MERGED (FAIL) [feat/CLIENT-UI-003-r1]: feat/CLIENT-UI-003-r1 is not merged: PR #21 is open
+
+PLAN-SPIKE-001 (revision 1, READY, branch feat/PLAN-SPIKE-001-r1)
+  complete FAIL:
+    - TASK_NOT_VALIDATED (FAIL) [PLAN-SPIKE-001]: task PLAN-SPIKE-001 has not reached 'validated'
+        - NOT_MERGED (FAIL) [feat/PLAN-SPIKE-001-r1]: feat/PLAN-SPIKE-001-r1 is not merged: no merged pull request
+
+SVC-IMPL-007 (revision 1, MERGED, branch feat/SVC-IMPL-007-r1)
+  complete UNKNOWN:
+    - TASK_NOT_VALIDATED (UNKNOWN) [SVC-IMPL-007]: task SVC-IMPL-007 has not reached 'validated'
+        - CHECK_MISSING (UNKNOWN) [svc@072e7df480091910d92ca5d9a1b589ce4eb984c5]: no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5

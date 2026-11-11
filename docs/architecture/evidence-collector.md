@@ -2,7 +2,8 @@
 
 `factory evidence collect <project-dir> [--output FILE]` reads GitHub through the authenticated
 GitHub CLI and writes an evidence snapshot (`factory.evidence-snapshot/v1`, provenance `github`)
-that `factory plan --evidence` evaluates unchanged.
+that `factory plan --evidence` evaluates unchanged. `factory plan --live` runs the same collector in memory and plans
+its result directly (see [live-planning.md](live-planning.md)).
 
 ## Separation of concerns
 

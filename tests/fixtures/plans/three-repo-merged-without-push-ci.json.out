@@ -1,0 +1,1121 @@
+{
+  "artifacts": {
+    "docs/adr/ADR-0001-contract-source.md": "fdb1a0f3f4f49fc7202663e4c1322267b6a397f229eaccafe9920d89bbde4e65",
+    "docs/adr/ADR-0002-module-layering.md": "c9d4fe57eaf7dc52bfc27d25d4ca4fc2dfc7c54fba9a58c2e41d35d3c531c0e1",
+    "factory/profiles/client.yaml": "edb5e09440545141ad4b92e1222ffb01c82f71e11eab192b0dec2272017e7038",
+    "factory/profiles/svc.yaml": "5941fe53b9097c19bc722f99209f25430ec690fc13b3becf86bb8ec83590e2f0",
+    "factory/project.yaml": "dbdd4d38dabb4e80fd4430f8ae3c6ec514d934168b82e8953f881f400340947c",
+    "factory/tasks/CLIENT-DOCS-005.yaml": "e815d9abe4a81c22e792ad175bb12d7d6c80eee1e3e1aad99bd236f7d72b4bd1",
+    "factory/tasks/CLIENT-INT-004.yaml": "73dcaac4e1634e91abde496eb01129474dd33f8f0dc2eb5dd5cfcd89be1e60aa",
+    "factory/tasks/CLIENT-UI-003.yaml": "90ada6aba110fae67542e4cedcac251f485cacdc037a8ff5bb53949e13c54840",
+    "factory/tasks/PLAN-SPIKE-001.yaml": "0ff5b54b0cf7546e681ca2647866ce0c711ecdd8a2379dcaf56bff8b68874d7d",
+    "factory/tasks/SVC-CONTRACT-002.yaml": "c0088baf896436a8a94cce6afd13cfaa85c1060563ae200f1cd5eb80c7a898ff",
+    "factory/tasks/SVC-IMPL-007.yaml": "65ff45dd2c2f6a5b4b85aa3577d073c4a4798a12bf886be8834315d24bd1db4e",
+    "specs/spike-storage.md": "a805dd2ed0e7da65473dfa565053963da3cdc69d3792608119a08180d2aef010",
+    "specs/stock-contract.md": "0dc6e36100643449619108c54202f91bb145a5bc15cd19da79fea89c419545ef",
+    "specs/stock-endpoint.md": "ac7ec1a2eba90aa26ad6dc81984d51adcfa5dcfaa32c646e409edfde234f82b3",
+    "specs/stock-help.md": "0f65c5ec55d3dd00b18b19e23ac219e102730db23155f1d2fabb7516f804b7ba",
+    "specs/stock-integration.md": "4aaad85118cc58c8ab15660e27aae4081f2eb25953c522931edcd472064bc2d4",
+    "specs/stock-ui.md": "3b6a27303ffe4ba485e7ee4dd236d45a882332bbd2b52f1493e832cf90513a77"
+  },
+  "evidence": {
+    "authenticated": false,
+    "observedAt": "2026-11-11T12:00:00Z",
+    "provenance": "simulated"
+  },
+  "project": "example-three",
+  "schemaVersion": "factory.plan/v1",
+  "summary": {
+    "BLOCKED": 1,
+    "COMPLETE": 1,
+    "IN_REVIEW": 0,
+    "MERGED": 1,
+    "READY": 1,
+    "STALE": 0,
+    "UNKNOWN": 2
+  },
+  "tasks": [
+    {
+      "achievedLevel": "approved",
+      "architecture": {
+        "profile": "client-arch",
+        "profileRevision": 1,
+        "reasons": [],
+        "required": true,
+        "result": "PASS"
+      },
+      "branch": "feat/CLIENT-DOCS-005-r1",
+      "dependencies": [
+        {
+          "dependencyLevel": "merged",
+          "gate": "start",
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "CHECK_MISSING",
+                  "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-IMPL-007 has not reached 'validated' (achieved: merged)",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-IMPL-007 is missing or inconclusive",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            }
+          ],
+          "requires": "validated",
+          "result": "UNKNOWN",
+          "task": "SVC-IMPL-007"
+        }
+      ],
+      "gates": {
+        "complete": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "NOT_MERGED",
+                  "message": "feat/CLIENT-DOCS-005-r1 is not merged: no merged pull request",
+                  "ref": "feat/CLIENT-DOCS-005-r1",
+                  "result": "FAIL"
+                }
+              ],
+              "code": "TASK_NOT_VALIDATED",
+              "message": "task CLIENT-DOCS-005 has not reached 'validated'",
+              "ref": "CLIENT-DOCS-005",
+              "result": "FAIL"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "merge": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "CHECK_MISSING",
+                  "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-IMPL-007 has not reached 'validated' (achieved: merged)",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-IMPL-007 is missing or inconclusive",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        },
+        "openPullRequest": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "start": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "CHECK_MISSING",
+                  "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-IMPL-007 has not reached 'validated' (achieved: merged)",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-IMPL-007 is missing or inconclusive",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        }
+      },
+      "id": "CLIENT-DOCS-005",
+      "kind": "chore",
+      "levels": {
+        "approved": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "environment-verified": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+              "message": "environment deployment evidence is not supported by this Factory Core version",
+              "ref": "CLIENT-DOCS-005",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "integration-ready": {
+          "reasons": [],
+          "result": "FAIL"
+        },
+        "merged": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "NOT_MERGED",
+              "message": "feat/CLIENT-DOCS-005-r1 is not merged: no merged pull request",
+              "ref": "feat/CLIENT-DOCS-005-r1",
+              "result": "FAIL"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "validated": {
+          "reasons": [],
+          "result": "FAIL"
+        }
+      },
+      "repository": "client",
+      "revision": 1,
+      "stale": [],
+      "state": "UNKNOWN"
+    },
+    {
+      "achievedLevel": "approved",
+      "architecture": {
+        "profile": "client-arch",
+        "profileRevision": 1,
+        "reasons": [],
+        "required": true,
+        "result": "PASS"
+      },
+      "branch": "feat/CLIENT-INT-004-r1",
+      "dependencies": [
+        {
+          "dependencyLevel": "validated",
+          "gate": "start",
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [
+                    {
+                      "causes": [],
+                      "code": "CHECK_MISSING",
+                      "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "result": "UNKNOWN"
+                    }
+                  ],
+                  "code": "HEAD_NOT_VALIDATED",
+                  "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-CONTRACT-002 has not reached 'integration-ready' (achieved: validated)",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-CONTRACT-002 is missing or inconclusive",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            }
+          ],
+          "requires": "integration-ready",
+          "result": "UNKNOWN",
+          "task": "SVC-CONTRACT-002"
+        },
+        {
+          "dependencyLevel": "approved",
+          "gate": "start",
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "NOT_MERGED",
+                  "message": "feat/CLIENT-UI-003-r1 is not merged: PR #21 is open",
+                  "ref": "feat/CLIENT-UI-003-r1",
+                  "result": "FAIL"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "CLIENT-UI-003 has not reached 'merged' (achieved: approved)",
+              "ref": "CLIENT-UI-003",
+              "result": "FAIL"
+            }
+          ],
+          "requires": "merged",
+          "result": "FAIL",
+          "task": "CLIENT-UI-003"
+        },
+        {
+          "dependencyLevel": "merged",
+          "gate": "merge",
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "CHECK_MISSING",
+                  "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                },
+                {
+                  "causes": [
+                    {
+                      "causes": [],
+                      "code": "CHECK_MISSING",
+                      "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "result": "UNKNOWN"
+                    }
+                  ],
+                  "code": "HEAD_NOT_VALIDATED",
+                  "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-IMPL-007 has not reached 'integration-ready' (achieved: merged)",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-IMPL-007 is missing or inconclusive",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            }
+          ],
+          "requires": "integration-ready",
+          "result": "UNKNOWN",
+          "task": "SVC-IMPL-007"
+        },
+        {
+          "dependencyLevel": "merged",
+          "gate": "complete",
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "CHECK_MISSING",
+                  "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                },
+                {
+                  "causes": [],
+                  "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+                  "message": "environment deployment evidence is not supported by this Factory Core version",
+                  "ref": "SVC-IMPL-007",
+                  "result": "UNKNOWN"
+                },
+                {
+                  "causes": [
+                    {
+                      "causes": [],
+                      "code": "CHECK_MISSING",
+                      "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "result": "UNKNOWN"
+                    }
+                  ],
+                  "code": "HEAD_NOT_VALIDATED",
+                  "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-IMPL-007 has not reached 'environment-verified' (achieved: merged)",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-IMPL-007 is missing or inconclusive",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            }
+          ],
+          "requires": "environment-verified",
+          "result": "UNKNOWN",
+          "task": "SVC-IMPL-007"
+        }
+      ],
+      "gates": {
+        "complete": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "CHECK_MISSING",
+                  "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                },
+                {
+                  "causes": [],
+                  "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+                  "message": "environment deployment evidence is not supported by this Factory Core version",
+                  "ref": "SVC-IMPL-007",
+                  "result": "UNKNOWN"
+                },
+                {
+                  "causes": [
+                    {
+                      "causes": [],
+                      "code": "CHECK_MISSING",
+                      "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "result": "UNKNOWN"
+                    }
+                  ],
+                  "code": "HEAD_NOT_VALIDATED",
+                  "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-IMPL-007 has not reached 'environment-verified' (achieved: merged)",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-IMPL-007 is missing or inconclusive",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "NOT_MERGED",
+                  "message": "feat/CLIENT-INT-004-r1 is not merged: no merged pull request",
+                  "ref": "feat/CLIENT-INT-004-r1",
+                  "result": "FAIL"
+                }
+              ],
+              "code": "TASK_NOT_VALIDATED",
+              "message": "task CLIENT-INT-004 has not reached 'validated'",
+              "ref": "CLIENT-INT-004",
+              "result": "FAIL"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "merge": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "NOT_MERGED",
+                  "message": "feat/CLIENT-UI-003-r1 is not merged: PR #21 is open",
+                  "ref": "feat/CLIENT-UI-003-r1",
+                  "result": "FAIL"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "CLIENT-UI-003 has not reached 'merged' (achieved: approved)",
+              "ref": "CLIENT-UI-003",
+              "result": "FAIL"
+            },
+            {
+              "causes": [
+                {
+                  "causes": [
+                    {
+                      "causes": [],
+                      "code": "CHECK_MISSING",
+                      "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "result": "UNKNOWN"
+                    }
+                  ],
+                  "code": "HEAD_NOT_VALIDATED",
+                  "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-CONTRACT-002 has not reached 'integration-ready' (achieved: validated)",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "CHECK_MISSING",
+                  "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                },
+                {
+                  "causes": [
+                    {
+                      "causes": [],
+                      "code": "CHECK_MISSING",
+                      "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "result": "UNKNOWN"
+                    }
+                  ],
+                  "code": "HEAD_NOT_VALIDATED",
+                  "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-IMPL-007 has not reached 'integration-ready' (achieved: merged)",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-CONTRACT-002 is missing or inconclusive",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-IMPL-007 is missing or inconclusive",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "openPullRequest": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "start": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "NOT_MERGED",
+                  "message": "feat/CLIENT-UI-003-r1 is not merged: PR #21 is open",
+                  "ref": "feat/CLIENT-UI-003-r1",
+                  "result": "FAIL"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "CLIENT-UI-003 has not reached 'merged' (achieved: approved)",
+              "ref": "CLIENT-UI-003",
+              "result": "FAIL"
+            },
+            {
+              "causes": [
+                {
+                  "causes": [
+                    {
+                      "causes": [],
+                      "code": "CHECK_MISSING",
+                      "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "result": "UNKNOWN"
+                    }
+                  ],
+                  "code": "HEAD_NOT_VALIDATED",
+                  "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-CONTRACT-002 has not reached 'integration-ready' (achieved: validated)",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-CONTRACT-002 is missing or inconclusive",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "FAIL"
+        }
+      },
+      "id": "CLIENT-INT-004",
+      "kind": "implementation",
+      "levels": {
+        "approved": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "environment-verified": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+              "message": "environment deployment evidence is not supported by this Factory Core version",
+              "ref": "CLIENT-INT-004",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "integration-ready": {
+          "reasons": [],
+          "result": "FAIL"
+        },
+        "merged": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "NOT_MERGED",
+              "message": "feat/CLIENT-INT-004-r1 is not merged: no merged pull request",
+              "ref": "feat/CLIENT-INT-004-r1",
+              "result": "FAIL"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "validated": {
+          "reasons": [],
+          "result": "FAIL"
+        }
+      },
+      "repository": "client",
+      "revision": 1,
+      "stale": [],
+      "state": "BLOCKED"
+    },
+    {
+      "achievedLevel": "approved",
+      "architecture": {
+        "profile": "client-arch",
+        "profileRevision": 1,
+        "reasons": [],
+        "required": true,
+        "result": "PASS"
+      },
+      "branch": "feat/CLIENT-UI-003-r1",
+      "dependencies": [
+        {
+          "dependencyLevel": "validated",
+          "gate": "start",
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [
+                    {
+                      "causes": [],
+                      "code": "CHECK_MISSING",
+                      "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "result": "UNKNOWN"
+                    }
+                  ],
+                  "code": "HEAD_NOT_VALIDATED",
+                  "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-CONTRACT-002 has not reached 'integration-ready' (achieved: validated)",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-CONTRACT-002 is missing or inconclusive",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            }
+          ],
+          "requires": "integration-ready",
+          "result": "UNKNOWN",
+          "task": "SVC-CONTRACT-002"
+        }
+      ],
+      "gates": {
+        "complete": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "NOT_MERGED",
+                  "message": "feat/CLIENT-UI-003-r1 is not merged: PR #21 is open",
+                  "ref": "feat/CLIENT-UI-003-r1",
+                  "result": "FAIL"
+                }
+              ],
+              "code": "TASK_NOT_VALIDATED",
+              "message": "task CLIENT-UI-003 has not reached 'validated'",
+              "ref": "CLIENT-UI-003",
+              "result": "FAIL"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "merge": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [
+                    {
+                      "causes": [],
+                      "code": "CHECK_MISSING",
+                      "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "result": "UNKNOWN"
+                    }
+                  ],
+                  "code": "HEAD_NOT_VALIDATED",
+                  "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-CONTRACT-002 has not reached 'integration-ready' (achieved: validated)",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-CONTRACT-002 is missing or inconclusive",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        },
+        "openPullRequest": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "start": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [
+                    {
+                      "causes": [],
+                      "code": "CHECK_MISSING",
+                      "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                      "result": "UNKNOWN"
+                    }
+                  ],
+                  "code": "HEAD_NOT_VALIDATED",
+                  "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "DEP_LEVEL_UNMET",
+              "message": "SVC-CONTRACT-002 has not reached 'integration-ready' (achieved: validated)",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            },
+            {
+              "causes": [],
+              "code": "EVIDENCE_UNKNOWN",
+              "message": "evidence needed to evaluate SVC-CONTRACT-002 is missing or inconclusive",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        }
+      },
+      "id": "CLIENT-UI-003",
+      "kind": "implementation",
+      "levels": {
+        "approved": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "environment-verified": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+              "message": "environment deployment evidence is not supported by this Factory Core version",
+              "ref": "CLIENT-UI-003",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "integration-ready": {
+          "reasons": [],
+          "result": "FAIL"
+        },
+        "merged": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "NOT_MERGED",
+              "message": "feat/CLIENT-UI-003-r1 is not merged: PR #21 is open",
+              "ref": "feat/CLIENT-UI-003-r1",
+              "result": "FAIL"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "validated": {
+          "reasons": [],
+          "result": "FAIL"
+        }
+      },
+      "repository": "client",
+      "revision": 1,
+      "stale": [],
+      "state": "UNKNOWN"
+    },
+    {
+      "achievedLevel": "approved",
+      "architecture": {
+        "profile": null,
+        "profileRevision": null,
+        "reasons": [],
+        "required": false,
+        "result": "PASS"
+      },
+      "branch": "feat/PLAN-SPIKE-001-r1",
+      "dependencies": [],
+      "gates": {
+        "complete": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "NOT_MERGED",
+                  "message": "feat/PLAN-SPIKE-001-r1 is not merged: no merged pull request",
+                  "ref": "feat/PLAN-SPIKE-001-r1",
+                  "result": "FAIL"
+                }
+              ],
+              "code": "TASK_NOT_VALIDATED",
+              "message": "task PLAN-SPIKE-001 has not reached 'validated'",
+              "ref": "PLAN-SPIKE-001",
+              "result": "FAIL"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "merge": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "openPullRequest": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "start": {
+          "reasons": [],
+          "result": "PASS"
+        }
+      },
+      "id": "PLAN-SPIKE-001",
+      "kind": "spike",
+      "levels": {
+        "approved": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "environment-verified": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+              "message": "environment deployment evidence is not supported by this Factory Core version",
+              "ref": "PLAN-SPIKE-001",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "integration-ready": {
+          "reasons": [],
+          "result": "FAIL"
+        },
+        "merged": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "NOT_MERGED",
+              "message": "feat/PLAN-SPIKE-001-r1 is not merged: no merged pull request",
+              "ref": "feat/PLAN-SPIKE-001-r1",
+              "result": "FAIL"
+            }
+          ],
+          "result": "FAIL"
+        },
+        "validated": {
+          "reasons": [],
+          "result": "FAIL"
+        }
+      },
+      "repository": "plan",
+      "revision": 1,
+      "stale": [],
+      "state": "READY"
+    },
+    {
+      "achievedLevel": "validated",
+      "architecture": {
+        "profile": "svc-arch",
+        "profileRevision": 1,
+        "reasons": [],
+        "required": true,
+        "result": "PASS"
+      },
+      "branch": "feat/SVC-CONTRACT-002-r1",
+      "dependencies": [
+        {
+          "dependencyLevel": "approved",
+          "gate": "start",
+          "reasons": [],
+          "requires": "approved",
+          "result": "PASS",
+          "task": "PLAN-SPIKE-001"
+        }
+      ],
+      "gates": {
+        "complete": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "merge": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "openPullRequest": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "start": {
+          "reasons": [],
+          "result": "PASS"
+        }
+      },
+      "id": "SVC-CONTRACT-002",
+      "kind": "contract",
+      "levels": {
+        "approved": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "environment-verified": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+              "message": "environment deployment evidence is not supported by this Factory Core version",
+              "ref": "SVC-CONTRACT-002",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        },
+        "integration-ready": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "CHECK_MISSING",
+                  "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "HEAD_NOT_VALIDATED",
+              "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+              "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        },
+        "merged": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "validated": {
+          "reasons": [],
+          "result": "PASS"
+        }
+      },
+      "repository": "svc",
+      "revision": 1,
+      "stale": [],
+      "state": "COMPLETE"
+    },
+    {
+      "achievedLevel": "merged",
+      "architecture": {
+        "profile": "svc-arch",
+        "profileRevision": 1,
+        "reasons": [],
+        "required": true,
+        "result": "PASS"
+      },
+      "branch": "feat/SVC-IMPL-007-r1",
+      "dependencies": [
+        {
+          "dependencyLevel": "validated",
+          "gate": "start",
+          "reasons": [],
+          "requires": "merged",
+          "result": "PASS",
+          "task": "SVC-CONTRACT-002"
+        }
+      ],
+      "gates": {
+        "complete": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "CHECK_MISSING",
+                  "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "TASK_NOT_VALIDATED",
+              "message": "task SVC-IMPL-007 has not reached 'validated'",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        },
+        "merge": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "openPullRequest": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "start": {
+          "reasons": [],
+          "result": "PASS"
+        }
+      },
+      "id": "SVC-IMPL-007",
+      "kind": "implementation",
+      "levels": {
+        "approved": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "environment-verified": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "ENVIRONMENT_EVIDENCE_UNSUPPORTED",
+              "message": "environment deployment evidence is not supported by this Factory Core version",
+              "ref": "SVC-IMPL-007",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        },
+        "integration-ready": {
+          "reasons": [
+            {
+              "causes": [
+                {
+                  "causes": [],
+                  "code": "CHECK_MISSING",
+                  "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+                  "result": "UNKNOWN"
+                }
+              ],
+              "code": "HEAD_NOT_VALIDATED",
+              "message": "integration head svc@072e7df480091910d92ca5d9a1b589ce4eb984c5 is not validated",
+              "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        },
+        "merged": {
+          "reasons": [],
+          "result": "PASS"
+        },
+        "validated": {
+          "reasons": [
+            {
+              "causes": [],
+              "code": "CHECK_MISSING",
+              "message": "no push run of check 'Svc Check' on branch 'dev' for svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+              "ref": "svc@072e7df480091910d92ca5d9a1b589ce4eb984c5",
+              "result": "UNKNOWN"
+            }
+          ],
+          "result": "UNKNOWN"
+        }
+      },
+      "repository": "svc",
+      "revision": 1,
+      "stale": [],
+      "state": "MERGED"
+    }
+  ]
+}

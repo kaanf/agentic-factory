@@ -1,7 +1,8 @@
 # Planning model (Factory Core v0.1)
 
 This describes what `factory plan` computes and the evidence snapshot it reads. The snapshot format
-is the interface the Stage 2 GitHub collector will produce.
+is the interface the GitHub collector produces; `plan --live` collects and plans in one step (see
+[live-planning.md](live-planning.md)).
 
 ## Tri-state results
 
@@ -131,7 +132,10 @@ Rules:
   any approval in a `github` snapshot, is UNKNOWN `HUMAN_AUTHORIZATION_UNVERIFIABLE` at best. See
   [approval-verification.md](approval-verification.md).
 - The optional `collection` block (`collector`, `complete`, `errors`) is an audit record written by
-  the collector. The planner ignores it; facts that could not be collected are simply absent.
+  the collector. The planner does not judge it (facts that could not be collected are simply absent),
+  but copies it, and `credentialIsolation`, unchanged into the plan's `evidence` when present.
+- A snapshot file and a snapshot collected in memory by `plan --live` pass the same validation
+  (`evidence.parse_snapshot`).
 - A branch listed with `"pullRequests": []` means "no PR exists". An unlisted branch is `UNKNOWN`.
 - An omitted commit attribute (`checkRuns`, `mergedPullRequests`, `reachableFromIntegrationHead`,
   `outputs`) is `UNKNOWN` for that attribute.

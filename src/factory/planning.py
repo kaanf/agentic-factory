@@ -184,13 +184,19 @@ class Plan:
         return dict(sorted(counts.items()))
 
     def to_dict(self) -> dict[str, Any]:
+        evidence: dict[str, Any] = {
+            "authenticated": self.snapshot.authenticated,
+            "observedAt": self.snapshot.observed_at,
+            "provenance": self.snapshot.provenance,
+        }
+        # Present only when the snapshot has them, so plans of hand-written snapshots are unchanged.
+        if self.snapshot.collection is not None:
+            evidence["collection"] = self.snapshot.collection
+        if self.snapshot.credential_isolation is not None:
+            evidence["credentialIsolation"] = self.snapshot.credential_isolation
         return {
             "artifacts": dict(sorted(self.project.digests.items())),
-            "evidence": {
-                "authenticated": self.snapshot.authenticated,
-                "observedAt": self.snapshot.observed_at,
-                "provenance": self.snapshot.provenance,
-            },
+            "evidence": evidence,
             "project": self.project.manifest.project_id,
             "schemaVersion": PLAN_SCHEMA_VERSION,
             "summary": self.summary(),
