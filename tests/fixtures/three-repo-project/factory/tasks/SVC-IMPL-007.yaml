@@ -1,0 +1,13 @@
+schemaVersion: factory.task/v1
+id: SVC-IMPL-007
+revision: 1
+title: Implement the stock endpoint
+repository: svc
+kind: implementation
+specification: {path: specs/stock-endpoint.md, sha256: ac7ec1a2eba90aa26ad6dc81984d51adcfa5dcfaa32c646e409edfde234f82b3}
+architecture: {profile: svc-arch, profileRevision: 1}
+provides: [svc-contract]
+dependsOn:
+  - {task: SVC-CONTRACT-002, gate: start, requires: merged}
+acceptance:
+  - GET /items returns quantity and unit for each item

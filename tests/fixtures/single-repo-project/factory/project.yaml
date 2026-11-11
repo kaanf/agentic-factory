@@ -1,0 +1,19 @@
+schemaVersion: factory.project/v1
+project:
+  id: solo-tool
+  name: Single-repository Python tool
+approvers: [solo-maintainer]
+planningRepository: tool
+repositories:
+  - id: tool
+    github: solo-maintainer/solo-tool
+    branches: {integration: trunk, release: stable, featurePrefix: topic/}
+    requiredChecks:
+      integration:
+        - {name: "pytest", workflowPath: .github/workflows/test.yml}
+        - {name: "import-linter", workflowPath: .github/workflows/architecture.yml}
+architecture:
+  adrDirectory: architecture/decisions
+  profiles:
+    - {id: tool-arch, repository: tool, path: factory/profiles/tool.yaml}
+dispatch: {}

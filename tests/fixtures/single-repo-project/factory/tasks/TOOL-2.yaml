@@ -1,0 +1,11 @@
+schemaVersion: factory.task/v1
+id: TOOL-2
+revision: 1
+title: Report output
+repository: tool
+kind: implementation
+specification: {path: requirements/report.md, sha256: 7d5c39c8e93a9046b14f6fc6621df01497cc3cd9479d8c526d9a25cc63064fae}
+architecture: {profile: tool-arch, profileRevision: 2}
+dependsOn:
+  - {task: TOOL-1, gate: start, requires: validated}
+acceptance: [Report lists every parsed section]

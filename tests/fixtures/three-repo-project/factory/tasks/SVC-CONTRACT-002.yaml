@@ -1,0 +1,13 @@
+schemaVersion: factory.task/v1
+id: SVC-CONTRACT-002
+revision: 1
+title: Publish the stock contract
+repository: svc
+kind: contract
+specification: {path: specs/stock-contract.md, sha256: 0dc6e36100643449619108c54202f91bb145a5bc15cd19da79fea89c419545ef}
+architecture: {profile: svc-arch, profileRevision: 1}
+provides: [svc-contract]
+dependsOn:
+  - {task: PLAN-SPIKE-001, gate: start, requires: approved}
+acceptance:
+  - Contract defines GET /items with quantity and unit

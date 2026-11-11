@@ -1,0 +1,9 @@
+schemaVersion: factory.task/v1
+id: TOOL-1
+revision: 3
+title: Parse configuration files
+repository: tool
+kind: implementation
+specification: {path: requirements/config.md, sha256: aafa009440d2b5d751cf3acc97786b79227a48ce161e1a502e97658c42d77a36}
+architecture: {profile: tool-arch, profileRevision: 2}
+acceptance: [Invalid configuration produces a clear error]

@@ -1,0 +1,11 @@
+schemaVersion: factory.task/v1
+id: TOOL-3
+revision: 1
+title: Release notes
+repository: tool
+kind: chore
+specification: {path: requirements/release-notes.md, sha256: 485669033e35c548cfb4589c2ee03c30ba5e6cecff3c4d405ccc333ab417d965}
+architecture: {profile: tool-arch, profileRevision: 2}
+dependsOn:
+  - {task: TOOL-2, gate: complete, requires: merged}
+acceptance: [Release notes mention the report command]

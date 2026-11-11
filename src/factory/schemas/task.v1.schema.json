@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory.task/v1",
+  "title": "Factory task v1",
+  "description": "One unit of work in one repository that results in one pull request. Approval is never declared in this file; it is derived from evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "revision", "title", "repository", "kind", "specification", "acceptance"],
+  "properties": {
+    "schemaVersion": {"const": "factory.task/v1"},
+    "id": {
+      "description": "Stable, unique task identifier. Used in branch names.",
+      "type": "string",
+      "maxLength": 80,
+      "pattern": "^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$"
+    },
+    "revision": {
+      "description": "Increment on any semantic change to the task.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "title": {"type": "string", "minLength": 1, "maxLength": 200},
+    "repository": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "kind": {
+      "description": "'spike' (research or proof of concept) is the only kind exempt from the architecture profile requirement.",
+      "enum": ["implementation", "contract", "chore", "spike"]
+    },
+    "specification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "sha256": {
+          "description": "SHA-256 of the specification file's bytes when the task was written. A different current hash makes the task STALE.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "architecture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "profileRevision"],
+      "properties": {
+        "profile": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+        "profileRevision": {"type": "integer", "minimum": 1}
+      }
+    },
+    "provides": {
+      "description": "Manifest output ids of the task's repository that this task creates or changes.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+    },
+    "consumes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["output", "version"],
+        "properties": {
+          "output": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "version": {
+            "description": "Semantic version range: exact (1.2.3), caret (^1.2.0), tilde (~1.2.0) or space-separated comparators (>=1.2.0 <2.0.0).",
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "dependsOn": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task", "gate", "requires"],
+        "properties": {
+          "task": {"type": "string", "pattern": "^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$"},
+          "gate": {
+            "description": "start: before work may begin. merge: before the task's PR may be merged. complete: before the task counts as complete.",
+            "enum": ["start", "merge", "complete"]
+          },
+          "requires": {
+            "description": "Assurance level the dependency must have reached.",
+            "enum": ["approved", "merged", "validated", "integration-ready", "environment-verified"]
+          }
+        }
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "if": {
+    "properties": {"kind": {"not": {"const": "spike"}}},
+    "required": ["kind"]
+  },
+  "then": {"required": ["architecture"]},
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![/\\\\])(?!.*(?:^|/)\\.\\.(?:/|$))[^\\\\\\x00]+$"
+    }
+  }
+}

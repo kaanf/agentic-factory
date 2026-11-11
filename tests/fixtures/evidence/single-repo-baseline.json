@@ -1,0 +1,132 @@
+{
+  "approvals": [
+    {
+      "approved": true,
+      "mergedBy": "solo-maintainer",
+      "path": "architecture/decisions/DEC-1.md",
+      "pullRequest": 1,
+      "sha256": "ac0dd12aa2e2a1a88ffc1b45ade970816231cb98738b6e9ed202ced74ef989b6"
+    },
+    {
+      "approved": true,
+      "mergedBy": "solo-maintainer",
+      "path": "factory/profiles/tool.yaml",
+      "pullRequest": 1,
+      "sha256": "c92ed8b062814aaeef5157058acc9c8d0872e8ab43d392f8649dc669725c0d13"
+    },
+    {
+      "approved": true,
+      "mergedBy": "solo-maintainer",
+      "path": "factory/tasks/TOOL-1.yaml",
+      "pullRequest": 1,
+      "sha256": "f76d2fabce80e3d4fd082fba6764c55d140a01fa2728a02464ff55da79ab1de6"
+    },
+    {
+      "approved": true,
+      "mergedBy": "solo-maintainer",
+      "path": "factory/tasks/TOOL-2.yaml",
+      "pullRequest": 1,
+      "sha256": "9f6b74ab5aadd3bc51f64721613ef6975b1be821e5e600437c129c4cf5b90464"
+    },
+    {
+      "approved": true,
+      "mergedBy": "solo-maintainer",
+      "path": "factory/tasks/TOOL-3.yaml",
+      "pullRequest": 1,
+      "sha256": "ce25cf5a8234a4dd23c2649e6d254256bb1c3d5f013dc2f874a06e387ba575b6"
+    }
+  ],
+  "project": "solo-tool",
+  "provenance": {
+    "kind": "simulated"
+  },
+  "repositories": {
+    "tool": {
+      "branches": {
+        "topic/TOOL-1-r3": {
+          "pullRequests": [
+            {
+              "baseBranch": "trunk",
+              "mergeCommitSha": "ad132baadcdb28e7d6c4ca5e6d681fc4fcb3a07f",
+              "number": 3,
+              "state": "merged"
+            }
+          ]
+        },
+        "topic/TOOL-2-r1": {
+          "pullRequests": [
+            {
+              "baseBranch": "trunk",
+              "mergeCommitSha": "d3c0845ed9b991c15c692502a86a86e80eb8e89c",
+              "number": 4,
+              "state": "merged"
+            }
+          ]
+        },
+        "topic/TOOL-3-r1": {
+          "pullRequests": []
+        }
+      },
+      "commits": {
+        "ad132baadcdb28e7d6c4ca5e6d681fc4fcb3a07f": {
+          "checkRuns": [
+            {
+              "app": "github-actions",
+              "attempt": 1,
+              "conclusion": "success",
+              "event": "push",
+              "headBranch": "trunk",
+              "name": "pytest",
+              "status": "completed",
+              "workflowPath": ".github/workflows/test.yml"
+            },
+            {
+              "app": "github-actions",
+              "attempt": 1,
+              "conclusion": "success",
+              "event": "push",
+              "headBranch": "trunk",
+              "name": "import-linter",
+              "status": "completed",
+              "workflowPath": ".github/workflows/architecture.yml"
+            }
+          ],
+          "mergedPullRequests": [
+            3
+          ],
+          "reachableFromIntegrationHead": true
+        },
+        "d3c0845ed9b991c15c692502a86a86e80eb8e89c": {
+          "checkRuns": [
+            {
+              "app": "github-actions",
+              "attempt": 1,
+              "conclusion": "success",
+              "event": "push",
+              "headBranch": "trunk",
+              "name": "pytest",
+              "status": "completed",
+              "workflowPath": ".github/workflows/test.yml"
+            },
+            {
+              "app": "github-actions",
+              "attempt": 1,
+              "conclusion": "success",
+              "event": "push",
+              "headBranch": "trunk",
+              "name": "import-linter",
+              "status": "completed",
+              "workflowPath": ".github/workflows/architecture.yml"
+            }
+          ],
+          "mergedPullRequests": [
+            4
+          ],
+          "reachableFromIntegrationHead": true
+        }
+      },
+      "integrationHead": "d3c0845ed9b991c15c692502a86a86e80eb8e89c"
+    }
+  },
+  "schemaVersion": "factory.evidence-snapshot/v1"
+}
