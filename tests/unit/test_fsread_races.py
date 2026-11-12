@@ -231,12 +231,70 @@ def test_world_writable_ancestor_is_refused(trees) -> None:  # type: ignore[no-u
         os.chmod(shared, 0o755)
 
 
-def test_group_writable_root_is_refused(trees) -> None:  # type: ignore[no-untyped-def]
+def test_root_writable_by_a_shared_group_is_refused(trees, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(fsread, "_group_is_private", lambda _gid: False)
     os.chmod(trees["trusted"], 0o775)
     try:
         assert _read(trees["trusted"], "m") == "refused:ROOT_PATH_UNSAFE"
     finally:
         os.chmod(trees["trusted"], 0o755)
+
+
+def test_root_writable_by_a_private_group_is_accepted(trees, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """User private groups (umask 002, as on GitHub runners) give no other principal write access."""
+    monkeypatch.setattr(fsread, "_group_is_private", lambda _gid: True)
+    os.chmod(trees["trusted"], 0o775)
+    os.chmod(trees["tmp"] / "a", 0o775)
+    try:
+        assert _read(trees["trusted"], "m") == "INSIDE"
+    finally:
+        os.chmod(trees["trusted"], 0o755)
+        os.chmod(trees["tmp"] / "a", 0o755)
+
+
+def test_world_writable_is_refused_even_for_a_private_group(trees, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(fsread, "_group_is_private", lambda _gid: True)
+    os.chmod(trees["tmp"] / "a", 0o777)
+    try:
+        assert _read(trees["trusted"], "m") == "refused:ROOT_PATH_UNSAFE"
+    finally:
+        os.chmod(trees["tmp"] / "a", 0o755)
+
+
+class _Group:
+    def __init__(self, members: list[str]) -> None:
+        self.gr_mem = members
+
+
+class _User:
+    def __init__(self, name: str, gid: int) -> None:
+        self.pw_name = name
+        self.pw_gid = gid
+
+
+@pytest.mark.parametrize(
+    ("members", "users", "private"),
+    [
+        ([], [("me", 7)], True),
+        (["me"], [("me", 7)], True),
+        (["me", "other"], [("me", 7)], False),
+        ([], [("me", 7), ("other", 7)], False),
+        ([], [("other", 7)], False),
+    ],
+)
+def test_private_group_membership_rule(monkeypatch, members, users, private) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setattr(fsread.pwd, "getpwuid", lambda _uid: _User("me", 7))
+    monkeypatch.setattr(fsread.grp, "getgrgid", lambda _gid: _Group(members))
+    monkeypatch.setattr(fsread.pwd, "getpwall", lambda: [_User(n, g) for n, g in users])
+    assert fsread._group_is_private.__wrapped__(7) is private
+
+
+def test_group_lookup_failure_counts_as_shared(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    def missing(_gid):  # type: ignore[no-untyped-def]
+        raise KeyError(_gid)
+
+    monkeypatch.setattr(fsread.grp, "getgrgid", missing)
+    assert fsread._group_is_private.__wrapped__(424242) is False
 
 
 def test_sticky_shared_directory_with_own_entry_is_accepted(trees) -> None:  # type: ignore[no-untyped-def]

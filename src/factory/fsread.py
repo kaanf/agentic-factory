@@ -9,9 +9,12 @@ Those trees are writable by other processes, so:
   directory). There is no resolve-then-open step and no restart from ``/``. Trust contract:
 
   * every directory the walk looks inside, the root included, must be modifiable only by root or
-    the current user: owned by one of them, and not group- or world-writable unless sticky; inside a
-    sticky directory the entry used must be owned by root or the current user (others cannot rename
-    it). Another principal therefore cannot swap any component of the path;
+    the current user: owned by one of them, not world-writable unless sticky, and not group-writable
+    unless sticky or its group can contain no one but the current user (a user private group: its
+    listed members and the accounts with it as primary group are at most the current user; a failed
+    lookup counts as shared). Inside a sticky directory shared with others, the entry used must be
+    owned by root or the current user (others cannot rename it). Another principal therefore cannot
+    swap any component of the path;
   * a symbolic link in the configured path is followed only if root controls it (the link and its
     directory are owned by root and the directory is not group- or world-writable) and its target is
     relative, as for ``/tmp``, ``/var`` and ``/etc`` on macOS or merged ``/usr`` on Linux; any other
@@ -47,7 +50,10 @@ Requires directory-relative ``open``, ``stat`` and ``readlink`` (``os.supports_d
 from __future__ import annotations
 
 import errno
+import functools
+import grp
 import os
+import pwd
 import stat
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,7 +96,24 @@ def _kind(mode: int) -> str:
 
 
 def _writable_by_others(info: os.stat_result) -> bool:
-    return bool(info.st_mode & 0o022)
+    """Whether a principal other than the owner may write: world-writable, or group-writable by a
+    group that can contain someone other than the current user."""
+    if info.st_mode & 0o002:
+        return True
+    return bool(info.st_mode & 0o020) and not _group_is_private(info.st_gid)
+
+
+@functools.cache
+def _group_is_private(gid: int) -> bool:
+    """True only if the group's members (listed members and accounts with it as primary group) are at
+    most the current user, as with user private groups. Any lookup failure counts as shared."""
+    try:
+        me = pwd.getpwuid(os.geteuid()).pw_name
+        members = set(grp.getgrgid(gid).gr_mem)
+        members.update(entry.pw_name for entry in pwd.getpwall() if entry.pw_gid == gid)
+    except (KeyError, OSError):
+        return False
+    return members <= {me}
 
 
 def _trusted_owner(uid: int) -> bool:
@@ -139,7 +162,7 @@ def _acquire(text: str) -> tuple[int, list[str]]:
             if _writable_by_others(before) and not _trusted_owner(entry.st_uid):
                 raise FsError("ROOT_PATH_UNSAFE", f"{text}: {part!r} in a shared directory belongs to another user")
             if stat.S_ISLNK(entry.st_mode):
-                if entry.st_uid != 0 or before.st_uid != 0 or _writable_by_others(before):
+                if entry.st_uid != 0 or before.st_uid != 0 or before.st_mode & 0o022:
                     raise FsError(
                         "ROOT_PATH_SYMLINK_UNTRUSTED",
                         f"{text}: {part!r} is a symbolic link not controlled by root; configure the real path",
