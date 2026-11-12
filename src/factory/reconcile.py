@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from factory.collector import branch_pull_requests
+from factory.fsread import INTEGRITY_CODES
 from factory.github import GitHubApi, GitHubError, path_of
 from factory.gitstate import ABSENT, PRESENT, CheckoutState, GitStateError, github_slug, read_checkout
 from factory.model import Project, Repository, Task
@@ -113,6 +114,9 @@ class RevisionFacts:
     worktree: bool | None
     remote: bool | None
     pulls: tuple[Pull, ...] | None
+    # A remote-tracking ref for the branch in the checkout's last fetch: local, possibly stale
+    # metadata, never live GitHub state. None: unknown (or no checkout).
+    tracking: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -251,13 +255,24 @@ def decide(obs: Observations) -> Reconciliation:
     findings.extend(_pull_findings(current, obs.integration))
     for name, value in (
         ("local branch", current.local),
-        ("worktree", current.worktree),
+        ("checked-out branch", current.worktree),
         ("remote branch", current.remote),
+        ("remote-tracking ref for", current.tracking),
     ):
         if value is None:
             findings.append(
                 _unknown("FACT_UNKNOWN", f"whether the {name} {current.branch} exists is unknown", current.branch)
             )
+
+    if current.tracking is True and current.remote is False:
+        findings.append(
+            _uncertain(
+                "REMOTE_TRACKING_CONTRADICTS_REMOTE",
+                f"the checkout's last fetch has a remote-tracking ref for {current.branch}, but GitHub shows no such "
+                "branch (stale fetch, deleted branch, or work pushed elsewhere); run git fetch --prune to refresh",
+                current.branch,
+            )
+        )
 
     superseded = False
     for older in obs.older:
@@ -391,6 +406,7 @@ def _absence_established(obs: Observations) -> bool:
         and current.local is False
         and current.worktree is False
         and current.remote is False
+        and current.tracking is False
         and current.pulls == ()
         and current.records is not None
         and not current.records.attempts
@@ -583,7 +599,11 @@ def observe(
         return held(project, task)
 
     records: TaskRecords = read_task_records(state_root, project.manifest.project_id, task.id)
-    findings.extend(_uncertain(p.code, p.message) for p in records.problems)
+    # The run records could not be observed (integrity failure, unreadable state): UNKNOWN. Anything
+    # else at task level (an unexpected entry, a link) is an observed contradiction: UNCERTAIN.
+    for problem in records.problems:
+        unobserved = problem.code in INTEGRITY_CODES or problem.code == "STATE_UNREADABLE"
+        findings.append((_unknown if unobserved else _uncertain)(problem.code, problem.message))
     if checkout is None and checkout_path is not None:
         checkout, checkout_findings = read_local(checkout_path, repo)
     findings.extend(checkout_findings or [])
@@ -599,6 +619,7 @@ def observe(
     def facts(revision: int) -> RevisionFacts:
         branch = _revision_branch(repo, task, revision)
         local, worktree = _local(checkout, branch)
+        tracking = _fact(checkout.remote_tracking_state(branch)) if checkout is not None else None
         return RevisionFacts(
             revision=revision,
             branch=branch,
@@ -607,6 +628,7 @@ def observe(
             worktree=worktree,
             remote=revision in remote.branches if remote.branches is not None else None,
             pulls=remote.pulls.get(branch) if api is not None else None,
+            tracking=tracking,
         )
 
     if not is_branch(_revision_branch(repo, task, task.revision)):
@@ -655,6 +677,7 @@ def reconcile_document(task: Task, repo: Repository, result: Reconciliation, obs
             if facts.pulls is not None
             else None,
             "remoteBranch": facts.remote,
+            "remoteTrackingRef": facts.tracking,
             "revision": facts.revision,
             "worktree": facts.worktree,
         }

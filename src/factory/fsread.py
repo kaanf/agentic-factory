@@ -80,6 +80,7 @@ INTEGRITY_CODES: frozenset[str] = frozenset(
         "BUDGET_EXCEEDED",
         "UNSAFE_PERMISSIONS",
         "PERMISSIONS_UNVERIFIABLE",
+        "ROOT_CHANGED",
     }
 )
 
@@ -335,10 +336,16 @@ class ConfinedTree:
     """An acquired root and the observations made through it; use as a context manager."""
 
     def __init__(
-        self, root: Path, fd: int, max_entries: int = DEFAULT_MAX_ENTRIES, max_bytes: int = DEFAULT_MAX_BYTES
+        self,
+        root: Path,
+        fd: int,
+        max_entries: int = DEFAULT_MAX_ENTRIES,
+        max_bytes: int = DEFAULT_MAX_BYTES,
+        configured: str | None = None,
     ) -> None:
         self.root = root
         self._fd = fd
+        self._configured = configured if configured is not None else str(root)
         self._max_entries = max_entries
         self._max_bytes = max_bytes
         self._bytes = 0
@@ -356,7 +363,7 @@ class ConfinedTree:
         if not text or "\0" in text:
             raise FsError("UNSAFE_PATH", f"unusable path {text!r}")
         fd, names = _acquire(text)
-        return cls(Path("/" + "/".join(names)), fd, max_entries, max_bytes)
+        return cls(Path("/" + "/".join(names)), fd, max_entries, max_bytes, text)
 
     # -- bookkeeping ------------------------------------------------------------------------------
 
@@ -374,7 +381,11 @@ class ConfinedTree:
             raise FsError("IDENTITY_CHANGED", f"{self._show(parts)} is not the object observed earlier")
 
     def _walk(self, parts: tuple[str, ...]) -> int:
-        """Open the directory ``parts``; every step must be the object recorded for it. Caller closes."""
+        """Open the directory ``parts``; every step must be the object recorded for it. Caller closes.
+
+        The root's permissions are re-checked on every walk: trust established at acquisition is not
+        assumed to persist."""
+        _policy(self._fd, os.fstat(self._fd), self._show(()), "UNSAFE_PERMISSIONS")
         fd = os.dup(self._fd)
         try:
             for index, part in enumerate(parts):
@@ -523,8 +534,29 @@ class ConfinedTree:
             os.close(fd)
 
     def verify(self) -> None:
-        """Raise ``TREE_CHANGED`` (or ``IDENTITY_CHANGED``) unless every observation still holds:
-        listed directories unchanged, files unchanged, absent entries still absent."""
+        """Re-check every observation, best effort: raise unless the configured path still names the
+        acquired root (``ROOT_CHANGED``), every traversed directory and every file read still satisfy
+        the permission policy, listed directories are unchanged, files are unchanged and absent
+        entries are still absent (``TREE_CHANGED``, ``IDENTITY_CHANGED``).
+
+        This is a detection, not a snapshot: it cannot see a change made after it re-checks an
+        object, and it relies on every mutation changing an object's identity or size or advancing
+        its modification or status-change time (see decision 0009, proposed)."""
+        try:
+            fd, _ = _acquire(self._configured)
+        except FsError as exc:
+            if exc.code in ("ROOT_PATH_UNSAFE", "PERMISSIONS_UNVERIFIABLE"):
+                raise FsError(
+                    "UNSAFE_PERMISSIONS", f"{self._configured}: trust no longer holds: {exc.message}"
+                ) from exc
+            raise FsError("ROOT_CHANGED", f"{self._configured} no longer resolves to the root: {exc.message}") from exc
+        try:
+            info = os.fstat(fd)
+        finally:
+            os.close(fd)
+        root = self._seen[()]
+        if (info.st_dev, info.st_ino) != (root.device, root.inode):
+            raise FsError("ROOT_CHANGED", f"{self._configured} now names a different directory than the one read")
         for parts, listed in sorted(self._listed.items()):
             fd = self._walk(parts)
             try:
@@ -555,6 +587,21 @@ class ConfinedTree:
             )
             if not same:
                 raise FsError("TREE_CHANGED", f"{self._show(parts)} changed after it was observed")
+            if seen.kind == "file":
+                self._recheck_file_policy(parts)
+
+    def _recheck_file_policy(self, parts: tuple[str, ...]) -> None:
+        directory = self._walk(parts[:-1])
+        try:
+            fd = os.open(parts[-1], _FILE_FLAGS, dir_fd=directory)
+        except OSError as exc:
+            raise FsError("TREE_CHANGED", f"{self._show(parts)} cannot be re-checked: {exc.strerror}") from exc
+        finally:
+            os.close(directory)
+        try:
+            _policy(fd, os.fstat(fd), self._show(parts), "UNSAFE_PERMISSIONS")
+        finally:
+            os.close(fd)
 
     def close(self) -> None:
         if self._fd >= 0:

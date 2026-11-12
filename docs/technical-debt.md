@@ -1,7 +1,7 @@
 # Technical debt register
 
-Known limitations carried by Factory Core v0.1, as of Stage 5 after three security review remediations
-(decisions 0006, 0007 and 0008). Classification:
+Known limitations carried by Factory Core v0.1, as of Stage 5 after four security reviews (decisions
+0006, 0007, 0008 and 0010; decision 0009 is PROPOSED and undecided). Classification:
 
 - **Stage 5 blocker**: invalidates a guarantee of the dry run, the run-record reader or read-only
   reconciliation (nothing executes, nothing is written, nothing is invented). Must be fixed in Stage 5.
@@ -16,6 +16,9 @@ pass the schema with a trailing newline are refused), but the schemas themselves
 7 are unchanged and remain Stage 6 prerequisites, now guarded by a structural invariant (preflight
 `authorization.granted` is never true; decision 0005, S2); 9 does not apply to Stage 5, which writes
 nothing.
+
+Fourth security review: Q2-Q5 are **fixed** (decision 0010). **Q1 is open**: it needs the human
+architecture decision in 0009 (item 30). Item 25 is restated as part of item 30.
 
 Third security review: findings S1-S3 (Medium) and S4-S5 (Low) are **fixed** (decision 0008); item 24
 is withdrawn with the private-group rule; items 18, 25-29 record what remains.
@@ -56,8 +59,10 @@ hard or symbolic link, was fixed in Stage 4 (decision 0004, L11); its residual r
 | 22 | The repository configuration allowlist accepts only `worktree.baseBranch`, `assistant`, `tiers`, `aliases`; the global `~/.archon/config.yaml` is checked only for provider layers | `archon.check_repo_config_keys` | Repositories needing hooks (`postCreate`, `copyFiles`) cannot pass preflight; global hooks or settings outside the provider layers are not inspected | Nonblocking (fails closed for repositories); global configuration review is part of Stage 6 operational readiness |
 | 23 | PyYAML (Factory Core) and Bun's YAML parser (Archon) may differ; anchors, aliases, merge keys, explicit tags and duplicate keys are refused to narrow the difference, but plain-YAML differences (YAML 1.1 vs 1.2 scalars) remain | `archon._ambiguous_yaml` | Keys are compared as strings; scalar-typing differences do not affect the allowlist | Nonblocking hardening |
 | 24 | ~~Private-group detection by enumeration~~ **Withdrawn** (S3): group membership is no longer used to establish trust; group-writable objects are refused | `fsread` | – | Resolved |
-| 25 | Identity and change detection rely on device/inode and on modification/status-change times (nanosecond on APFS and ext4). A change within one timestamp tick that also preserves size and inode would not be seen | `fsread.ConfinedTree` (`list`, `read`, `verify`) | Requires a same-tick in-place rewrite of identical size; refused paths already exclude other principals | Nonblocking hardening |
+| 25 | Change detection relies on device/inode, size and modification/status-change times; a mutation that keeps all of them (same timestamp tick on coarse-clock filesystems such as Linux ext4/XFS, clock adjustments) is not seen | `fsread.ConfinedTree` | Best-effort detection; see item 30 | Part of item 30 |
 | 26 | macOS ACL evaluation is conservative: any *allow* entry with a modifying right is refused, even one naming the owner; qualifiers are not resolved | `fsread._darwin_acl` | Unusual owner-only allow ACLs make a path unusable; fails closed | Nonblocking |
 | 27 | Linux ACL handling relies on POSIX ACL semantics (other principals bounded by the mask = group-class mode bits); NFSv4/rich ACLs are refused; verified by CI only when `setfacl` is available there, not by the macOS tests | `fsread._linux_acl` | Filesystems with other ACL models are refused | Nonblocking; record the CI result |
 | 28 | Hosts with umask 002 (Ubuntu user private groups, GitHub runners) produce group-writable checkouts and state, which are refused | `fsread` permission policy | Operators must use umask 022 or remove group write for Factory Core paths; documented. The test suite builds fixtures with umask 022 and tests the refusal explicitly | **Operational prerequisite** for Stage 6 hosts |
 | 29 | Budgets are per tree and fixed (run records 10,000 objects / 16 MiB; other trees 250,000 objects / 64 MiB) | `runs.py`, `fsread.py` | Histories beyond the budget are unreadable (UNKNOWN), never truncated | Nonblocking; revisit if real histories approach them |
+| 30 | **Observations are not atomic and not valid at execution time (Q1).** `verify()` detects changes made before it re-checks an object, not after; the lock, records, checkout and GitHub are observed at different moments. `NO_RUN` / `blocksDispatch: false` describe a past moment | `fsread`, `runs`, `gitstate`, `reconcile` | No Stage 5 effect (nothing executes; authorization is never granted). Any consumer treating `NO_RUN` as "nothing can exist now" would be wrong. Kept as strict-xfail tests | **Architecture decision required** (decision 0009, PROPOSED): recommended diagnostic semantics in Stage 5 and cooperative locking in Stage 6; a **Stage 6 prerequisite** either way |
+| 31 | PR checks test the synthetic merge ref, not an exact integration SHA; exact-SHA push CI exists only after merge | CI | The PR's green check is not integration evidence (4B F1) | Recorded; evaluate push CI on `dev` after any merge |

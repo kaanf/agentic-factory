@@ -290,6 +290,16 @@ structural cause was that `NO_RUN` was the fall-through when no finding was rais
 observation failure that did not raise its own finding increased confidence. Each earlier fix
 patched one producer of findings. This section is the model that now holds instead.
 
+> **Open decision: temporal limits (decision 0009, PROPOSED, not accepted).** Every observation
+> describes a past moment. Per source (run records, checkout, Archon's home), observations are
+> re-checked before use and a detected change refuses, but this is best-effort detection, not an
+> atomic snapshot: a change made after `verify()` has re-checked an object is not seen (review
+> finding Q1, reproduced and kept as a strict-xfail test), detection relies on every mutation
+> changing an object's identity or size or advancing its times, and the lock, records, checkout and
+> GitHub are observed at different moments. `NO_RUN` and `blocksDispatch: false` therefore say
+> nothing about the state when anyone later acts on them; that guarantee belongs to Stage 6's
+> locked dispatch path (4B §7). The invariants below are unchanged until decision 0009 is decided.
+
 **Invariants.**
 
 1. `NO_RUN` requires complete, coherent, affirmative evidence of absence.
@@ -336,7 +346,8 @@ configuration, Archon's home) goes through `fsread.ConfinedTree`:
 | Identity ledger | Every object observed through one tree (traversed directory, listed entry, file read, entry found absent) is recorded with device, inode and type. Any later open of that path must find the same object (`IDENTITY_CHANGED`); below the root every step is descriptor-relative with `O_NOFOLLOW` and the opened object must be the one `lstat` found |
 | Complete listing | Enumeration of a directory is accepted only if its modification and status-change times did not change during it (`DIRECTORY_CHANGED`) |
 | Stable file | A file must not change while it is read (`FILE_CHANGED`) |
-| Coherent snapshot | `verify()` at the end of `read_task_records`, `read_checkout` and each Archon reader re-checks every observation: listed directories unchanged, files unchanged, absences still absent (`TREE_CHANGED`) |
+| Change detection before use (best effort, not a snapshot) | `verify()` at the end of `read_task_records`, `read_checkout` and each Archon reader re-walks the configured path, which must still name the acquired root (`ROOT_CHANGED`), and re-checks every observation: listed directories unchanged, files unchanged and still satisfying the permission policy, absences still absent (`TREE_CHANGED`). A change after an object was re-checked is not seen (decision 0009) |
+| Continuing trust | The root's permissions and ACL are re-checked on every walk, and every traversed directory's on every access; trust established at acquisition is not assumed to persist |
 | Budgets | Per tree: objects observed and bytes read (`BUDGET_EXCEEDED`); run records 10,000 objects and 16 MiB (rationale in `runs.py`), other trees 250,000 objects and 64 MiB |
 
 Integrity codes (`INTEGRITY_CODES`) never mean "absent": run records become unreadable (reconcile
@@ -383,9 +394,18 @@ Out of scope: a process running as the current user that changes a path before i
 - **The effective provider is not established.** Archon's database-held layers (per-user AI
   preferences, per-codebase settings) can change it and are not readable; every preflight is
   therefore at best UNKNOWN.
-- **Parsing is bounded.** YAML is limited to 64 levels and 200,000 events, checked on the iterative
-  event stream before any node is composed (`YAML_TOO_COMPLEX`); deeply nested JSON is refused
-  instead of exhausting the stack.
+- **YAML is a bounded subset.** At most 1 MiB, checked before parsing; then, on the iterative event
+  stream and before any node is composed: no anchors, aliases, merge keys or explicit tags
+  (`YAML_UNSUPPORTED`; no Factory Core schema uses them), scalar keys unique within their mapping
+  (`INVALID_YAML`), at most 64 levels and 200,000 events (`YAML_TOO_COMPLEX`). Integer literals beyond
+  Python's digit limit are structured errors.
+- **JSON is bounded.** At most 64 MiB; integer literals beyond Python's digit limit (the limit is
+  kept) and excessive nesting are structured errors (`INVALID_JSON`), so a run record containing one
+  is corrupt (UNCERTAIN), never an empty history.
+- **Remote-tracking refs are local, possibly stale metadata.** Reconcile and preflight read them the
+  same way: unknown is UNKNOWN; present while GitHub shows no branch is UNCERTAIN
+  (`REMOTE_TRACKING_CONTRADICTS_REMOTE`; run `git fetch --prune`); they never stand in for live
+  GitHub state, and `NO_RUN` requires them to be absent.
 - **Configured paths must be real paths.** A symbolic link the current user owns anywhere in
   `--checkout`, `--state-dir` or `--archon-home` is refused; only root-controlled relative system
   links (macOS `/tmp`, `/var`, `/etc`; merged `/usr` on Linux) are followed.

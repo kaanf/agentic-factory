@@ -485,13 +485,14 @@ def check_repo_config_keys(text: str | None, where: str) -> list[Finding]:
     label = f"{where} .archon/config.yaml"
     try:
         construct = _ambiguous_yaml(text)
-        document = parse_yaml(text)
     except yaml.YAMLError as exc:
         return [_fail("ARCHON_REPO_CONFIG_INVALID", f"{label}: invalid YAML: {getattr(exc, 'problem', exc)}")]
-    except DocumentError as exc:
-        return [_fail("ARCHON_REPO_CONFIG_INVALID", f"{label}: {exc.message}")]
     if construct is not None:
         return [_fail("ARCHON_REPO_CONFIG_AMBIGUOUS", f"{label} uses {construct}; only plain YAML is accepted")]
+    try:
+        document = parse_yaml(text)
+    except DocumentError as exc:
+        return [_fail("ARCHON_REPO_CONFIG_INVALID", f"{label}: {exc.message}")]
     if not isinstance(document, dict):
         return [_fail("ARCHON_REPO_CONFIG_INVALID", f"{label} is not a mapping")]
     findings: list[Finding] = []
