@@ -1,7 +1,7 @@
 # Technical debt register
 
-Known limitations carried by Factory Core v0.1, as of Stage 5 after two security review remediations
-(decisions 0006 and 0007). Classification:
+Known limitations carried by Factory Core v0.1, as of Stage 5 after three security review remediations
+(decisions 0006, 0007 and 0008). Classification:
 
 - **Stage 5 blocker**: invalidates a guarantee of the dry run, the run-record reader or read-only
   reconciliation (nothing executes, nothing is written, nothing is invented). Must be fixed in Stage 5.
@@ -16,6 +16,9 @@ pass the schema with a trailing newline are refused), but the schemas themselves
 7 are unchanged and remain Stage 6 prerequisites, now guarded by a structural invariant (preflight
 `authorization.granted` is never true; decision 0005, S2); 9 does not apply to Stage 5, which writes
 nothing.
+
+Third security review: findings S1-S3 (Medium) and S4-S5 (Low) are **fixed** (decision 0008); item 24
+is withdrawn with the private-group rule; items 18, 25-29 record what remains.
 
 Second security review: findings R1-R3 are **fixed** (decision 0007); items 14 and 18 changed
 accordingly.
@@ -46,10 +49,15 @@ hard or symbolic link, was fixed in Stage 4 (decision 0004, L11); its residual r
 | 15 | The lock probe takes a shared `flock` for an instant | `runs.probe_lock` | A coordinator trying its exclusive lock at that instant fails and refuses its dispatch | Nonblocking (safe direction) |
 | 16 | Linked-worktree and reftable checkouts unsupported; remote-tracking refs are only the last fetch | `gitstate` | Unsupported layouts make local facts UNKNOWN; stale remote-tracking refs can only add refusals (`REMOTE_TRACKING_BRANCH_EXISTS`) | Nonblocking hardening |
 | 17 | `archon-implement` opens no pull request | Archon workflow definition | A successful run normally ends as `NO_PR` with an unpushed branch | **Future design item** for Stage 6: decide how the PR is opened (reviewed workflow or human) |
-| 18 | Filesystem trust contract (R2 fixed): no other principal can change a root path component, only root-controlled relative links are followed, and concurrent change during acquisition refuses. A process running as the current user can still change the path before the walk reaches a component | `fsread.ConfinedTree.open` | Same-user writers are the operator's own principal; they choose the configuration in effect, they cannot redirect an acquisition in progress (concurrent change refuses) or a tree already open. Concurrent activity in a root-path directory (e.g. the home directory) can cause a spurious refusal | **Future security prerequisite**: agents under another OS user (4B P2) |
+| 18 | Filesystem identity and trust contract (R2, S2, S3 fixed). A process running as the current user can still change a path before it is first observed | `fsread.ConfinedTree` | Same-user writers are the operator's own principal; they cannot redirect an acquisition in progress, substitute an observed object, or make a changed tree pass `verify()`. Concurrent activity in an observed directory causes a refusal, never a wrong answer | **Future security prerequisite**: agents under another OS user (4B P2) |
 | 19 | The CLI lock probe is an observation (F6 fixed) | `cli._preflight`, `runs.probe_lock` | The lock can be taken right after the probe; the early refusal avoids requests but proves nothing about later moments | **Future security prerequisite**: Stage 6 holds the exclusive lock across plan, preflight and Archon start |
 | 20 | GitHub matching-refs has no completeness signal; listings of 100+ refs for one task prefix are treated as incomplete (F2 fixed) | `reconcile.remote_branch_names` | A task with that many branches can never reconcile; fails closed | Nonblocking hardening |
 | 21 | Stage 2 collection now treats PR records with missing identity as incomplete (F2) | `collector.branch_pull_requests` | A PR from a deleted fork with the same head owner and branch makes that branch's facts UNKNOWN | Nonblocking (fails closed) |
 | 22 | The repository configuration allowlist accepts only `worktree.baseBranch`, `assistant`, `tiers`, `aliases`; the global `~/.archon/config.yaml` is checked only for provider layers | `archon.check_repo_config_keys` | Repositories needing hooks (`postCreate`, `copyFiles`) cannot pass preflight; global hooks or settings outside the provider layers are not inspected | Nonblocking (fails closed for repositories); global configuration review is part of Stage 6 operational readiness |
 | 23 | PyYAML (Factory Core) and Bun's YAML parser (Archon) may differ; anchors, aliases, merge keys, explicit tags and duplicate keys are refused to narrow the difference, but plain-YAML differences (YAML 1.1 vs 1.2 scalars) remain | `archon._ambiguous_yaml` | Keys are compared as strings; scalar-typing differences do not affect the allowlist | Nonblocking hardening |
-| 24 | Private-group detection enumerates group members and primary-group accounts with `grp`/`pwd`; on hosts whose account database is not fully enumerable (some directory services), a shared group could look private | `fsread._group_is_private` | Only affects group-writable directories on such hosts; world-writable directories are always refused unless sticky | Nonblocking hardening; use umask 022 on such hosts |
+| 24 | ~~Private-group detection by enumeration~~ **Withdrawn** (S3): group membership is no longer used to establish trust; group-writable objects are refused | `fsread` | – | Resolved |
+| 25 | Identity and change detection rely on device/inode and on modification/status-change times (nanosecond on APFS and ext4). A change within one timestamp tick that also preserves size and inode would not be seen | `fsread.ConfinedTree` (`list`, `read`, `verify`) | Requires a same-tick in-place rewrite of identical size; refused paths already exclude other principals | Nonblocking hardening |
+| 26 | macOS ACL evaluation is conservative: any *allow* entry with a modifying right is refused, even one naming the owner; qualifiers are not resolved | `fsread._darwin_acl` | Unusual owner-only allow ACLs make a path unusable; fails closed | Nonblocking |
+| 27 | Linux ACL handling relies on POSIX ACL semantics (other principals bounded by the mask = group-class mode bits); NFSv4/rich ACLs are refused; verified by CI only when `setfacl` is available there, not by the macOS tests | `fsread._linux_acl` | Filesystems with other ACL models are refused | Nonblocking; record the CI result |
+| 28 | Hosts with umask 002 (Ubuntu user private groups, GitHub runners) produce group-writable checkouts and state, which are refused | `fsread` permission policy | Operators must use umask 022 or remove group write for Factory Core paths; documented. The test suite builds fixtures with umask 022 and tests the refusal explicitly | **Operational prerequisite** for Stage 6 hosts |
+| 29 | Budgets are per tree and fixed (run records 10,000 objects / 16 MiB; other trees 250,000 objects / 64 MiB) | `runs.py`, `fsread.py` | Histories beyond the budget are unreadable (UNKNOWN), never truncated | Nonblocking; revisit if real histories approach them |

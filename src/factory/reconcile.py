@@ -372,7 +372,32 @@ def decide(obs: Observations) -> Reconciliation:
                 )
             )
             state = State.ATTEMPTS_EXHAUSTED
+    if state is State.NO_RUN and not _absence_established(obs):
+        # Invariant 1: NO_RUN needs affirmative evidence of absence, never the mere lack of findings.
+        findings.append(
+            _unknown("ABSENCE_NOT_ESTABLISHED", "not every fact needed to establish that nothing ran is affirmative")
+        )
+        state = State.UNKNOWN
     return Reconciliation(state, tuple(sorted(set(findings))), tuple(sorted(set(history))), used, obs.attempt_cap)
+
+
+def _absence_established(obs: Observations) -> bool:
+    """Every absence fact for the current revision is an explicit False from a readable observation,
+    the records for every examined revision are complete, and no older revision's PRs are unknown."""
+    current = obs.current
+    revisions = [current, *obs.older]
+    return (
+        obs.lock in ("absent", "free")
+        and current.local is False
+        and current.worktree is False
+        and current.remote is False
+        and current.pulls == ()
+        and current.records is not None
+        and not current.records.attempts
+        and all(r.records is not None and not r.records.problems for r in revisions)
+        and all(r.pulls is not None for r in revisions)
+        and not obs.newer_revisions
+    )
 
 
 # -- observation ---------------------------------------------------------------------------------
@@ -469,9 +494,10 @@ def _fact(state: str) -> bool | None:
 
 
 def _local(checkout: CheckoutState | None, branch: str) -> tuple[bool | None, bool | None]:
+    """(local ref exists, checked out anywhere: the primary HEAD or a linked worktree)."""
     if checkout is None:
         return None, None
-    return _fact(checkout.branch_state(branch)), _fact(checkout.worktree_state(branch))
+    return _fact(checkout.branch_state(branch)), _fact(checkout.checked_out_state(branch))
 
 
 def _local_ref_findings(checkout: CheckoutState, branches: list[str]) -> list[Finding]:
@@ -486,6 +512,14 @@ def _local_ref_findings(checkout: CheckoutState, branches: list[str]) -> list[Fi
                 findings.append(
                     _uncertain("REMOTE_TRACKING_REF_UNRESOLVED", f"remote-tracking ref {name} {why}", branch)
                 )
+        if checkout.head_target_unresolved(branch):
+            findings.append(
+                _uncertain(
+                    "HEAD_TARGET_UNRESOLVED",
+                    f"the checkout's HEAD names {branch}, but no ref for it resolves (unborn or dangling)",
+                    branch,
+                )
+            )
     targets = {f"'refs/heads/{b}'" for b in branches}
     for name, why in checkout.local.unresolved.items():
         if any(target in why for target in targets):

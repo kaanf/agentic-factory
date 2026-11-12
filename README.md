@@ -120,6 +120,8 @@ Schemas: `src/factory/schemas/*.schema.json` (JSON Schema 2020-12, shipped insid
 - [Decision 0006](docs/decisions/0006-stage5-security-remediation.md): Stage 5 security review
   findings F1-F6 and their fixes.
 - [Decision 0007](docs/decisions/0007-stage5-second-remediation.md): second review findings R1-R3.
+- [Decision 0008](docs/decisions/0008-stage5-observation-integrity.md): observation integrity, third
+  review findings S1-S5.
 - [Archon probes](docs/probes/archon-probes.md): why no executable probe ships, and the conditions
   for a future approved manual probe (acceptance incomplete).
 - [Provider verification](docs/architecture/provider-verification.md): evidence, missing acceptance

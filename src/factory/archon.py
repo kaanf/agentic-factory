@@ -213,6 +213,11 @@ def read_archon_home(home: Path) -> ArchonInstall:
                 )
         except (FsError, DocumentError, UnicodeDecodeError) as exc:
             assistant_problem = _unknown("ARCHON_DEFAULT_ASSISTANT_UNKNOWN", f"Archon config: {_message(exc)}")
+        try:
+            tree.verify()
+        except FsError as exc:
+            problem = _unknown("ARCHON_HOME_CHANGED", f"Archon home changed while it was read: {exc.message}")
+            return ArchonInstall(None, None, problem, problem)
     return ArchonInstall(version, assistant, version_problem, assistant_problem, config)
 
 
@@ -434,6 +439,7 @@ def check_workflow_definitions(workflow: str | None, checkout: Path, home: Path)
             with ConfinedTree.open(root) as tree:
                 for base in dirs:
                     findings.extend(_scan_definitions(tree, base, workflow, f"{label} {'/'.join(base)}"))
+                tree.verify()
         except FsError as exc:
             findings.append(_unknown("ARCHON_WORKFLOW_DEFINITIONS_UNREADABLE", f"{label}: {exc.message}"))
     return findings
@@ -547,7 +553,9 @@ def check_repo_config(text: str | None, problem: FsError | None, integration: st
 def read_local_repo_config(checkout: Path) -> tuple[str | None, FsError | None]:
     try:
         with ConfinedTree.open(checkout) as tree:
-            return tree.read(*REPO_CONFIG, max_bytes=_SMALL_FILE).decode("utf-8"), None
+            text = tree.read(*REPO_CONFIG, max_bytes=_SMALL_FILE).decode("utf-8")
+            tree.verify()
+            return text, None
     except FsError as exc:
         return None, exc
     except UnicodeDecodeError:

@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from factory.fsread import ConfinedTree, FsError
+from factory.fsread import INTEGRITY_CODES, ConfinedTree, FsError
 from factory.refs import is_branch, is_object_id
 
 _REF_BYTES = 4096
@@ -127,6 +127,18 @@ class CheckoutState:
                 return UNKNOWN
         return ABSENT
 
+    def checked_out_state(self, branch: str) -> str:
+        """Whether ``branch`` is checked out anywhere: the primary checkout's HEAD or a linked worktree."""
+        if self.head_branch == branch or any(w.branch == branch for w in self.worktrees):
+            return PRESENT
+        if not self.head_known or any(w.state == UNKNOWN for w in self.worktrees):
+            return UNKNOWN
+        return ABSENT
+
+    def head_target_unresolved(self, branch: str) -> bool:
+        """The primary HEAD names ``branch`` but no ref for it resolves (an unborn or dangling target)."""
+        return self.head_branch == branch and branch not in self.local.resolved
+
     def worktree_state(self, branch: str) -> str:
         if any(w.branch == branch for w in self.worktrees):
             return PRESENT
@@ -136,6 +148,11 @@ class CheckoutState:
 
     def worktrees_on(self, branch: str) -> list[Worktree]:
         return [w for w in self.worktrees if w.branch == branch]
+
+
+def _metadata_error(exc: FsError) -> GitStateError:
+    """An unreadable piece of git metadata; integrity failures keep their own code."""
+    return GitStateError(exc.code if exc.code in INTEGRITY_CODES else "GIT_METADATA_UNREADABLE", exc.message)
 
 
 def _text(tree: ConfinedTree, parts: tuple[str, ...], limit: int) -> str:
@@ -178,10 +195,12 @@ class _Reader:
         try:
             entries = self.tree.list(*base)
         except FsError as exc:
+            if exc.code in INTEGRITY_CODES:
+                raise GitStateError(exc.code, exc.message) from exc
             if exc.code == "NOT_FOUND" and not prefix:
                 return
             if not prefix:
-                raise GitStateError("GIT_METADATA_UNREADABLE", exc.message) from exc
+                raise _metadata_error(exc) from exc
             self._unknown(
                 refs, prefix.rstrip("/"), f"ref directory {prefix.rstrip('/')} cannot be listed: {exc.message}"
             )
@@ -201,7 +220,12 @@ class _Reader:
                 continue
             try:
                 value = _text(self.tree, (*base, entry.name), _REF_BYTES)
-            except (FsError, GitStateError) as exc:
+            except FsError as exc:
+                if exc.code in INTEGRITY_CODES:
+                    raise GitStateError(exc.code, exc.message) from exc
+                self._unresolved(refs, name, f"is unreadable: {exc.message}")
+                continue
+            except GitStateError as exc:
                 self._unresolved(refs, name, f"is unreadable: {exc.message}")
                 continue
             stripped = value.strip()
@@ -221,7 +245,7 @@ class _Reader:
         except FsError as exc:
             if exc.code == "NOT_FOUND":
                 return []
-            raise GitStateError("GIT_METADATA_UNREADABLE", exc.message) from exc
+            raise _metadata_error(exc) from exc
         refs = []
         for line in text.splitlines():
             if not line or line.startswith(("#", "^")):
@@ -292,7 +316,7 @@ def read_checkout(path: Path) -> CheckoutState:
             origin, storage = _config(_text(tree, (".git", "config"), _CONFIG_BYTES))
             reftable = tree.kind(".git", "reftable") is not None
         except FsError as exc:
-            raise GitStateError("GIT_METADATA_UNREADABLE", exc.message) from exc
+            raise _metadata_error(exc) from exc
         if reftable or (storage is not None and storage != "files"):
             raise GitStateError("CHECKOUT_LAYOUT_UNSUPPORTED", "the reftable ref backend is not supported")
 
@@ -321,7 +345,7 @@ def read_checkout(path: Path) -> CheckoutState:
         try:
             head_kind, head = _head(_text(tree, (".git", "HEAD"), _REF_BYTES))
         except FsError as exc:
-            raise GitStateError("GIT_METADATA_UNREADABLE", exc.message) from exc
+            raise _metadata_error(exc) from exc
         if head_kind == UNKNOWN:
             reader.problems.append("HEAD is neither a branch reference nor an object id")
 
@@ -330,7 +354,7 @@ def read_checkout(path: Path) -> CheckoutState:
             entries = tree.list(".git", "worktrees")
         except FsError as exc:
             if exc.code != "NOT_FOUND":
-                raise GitStateError("GIT_METADATA_UNREADABLE", exc.message) from exc
+                raise _metadata_error(exc) from exc
             entries = []
         for entry in entries:
             if entry.kind != "directory":
@@ -339,7 +363,12 @@ def read_checkout(path: Path) -> CheckoutState:
                 continue
             try:
                 state, branch = _head(_text(tree, (".git", "worktrees", entry.name, "HEAD"), _REF_BYTES))
-            except (FsError, GitStateError) as exc:
+            except FsError as exc:
+                if exc.code in INTEGRITY_CODES:
+                    raise GitStateError(exc.code, exc.message) from exc
+                state, branch = UNKNOWN, None
+                reader.problems.append(f"worktree {entry.name} HEAD is unreadable: {exc.message}")
+            except GitStateError as exc:
                 state, branch = UNKNOWN, None
                 reader.problems.append(f"worktree {entry.name} HEAD is unreadable: {getattr(exc, 'message', exc)}")
             else:
@@ -348,9 +377,19 @@ def read_checkout(path: Path) -> CheckoutState:
             try:
                 gitdir = _text(tree, (".git", "worktrees", entry.name, "gitdir"), _REF_BYTES).strip()
                 location: str | None = gitdir.removesuffix("/.git") if gitdir else None
-            except (FsError, GitStateError):
+            except FsError as exc:
+                if exc.code in INTEGRITY_CODES:
+                    raise GitStateError(exc.code, exc.message) from exc
+                location = None
+            except GitStateError:
                 location = None
             worktrees.append(Worktree(entry.name, location, branch, state))
+
+        try:
+            # Everything above must describe one moment: no observed file, listing or absence changed.
+            tree.verify()
+        except FsError as exc:
+            raise GitStateError(exc.code, f"git metadata changed while it was read: {exc.message}") from exc
 
         def ordered(refs: RefSet) -> RefSet:
             return RefSet(dict(sorted(refs.resolved.items())), dict(sorted(refs.unresolved.items())), refs.unknown)

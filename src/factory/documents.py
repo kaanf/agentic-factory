@@ -50,9 +50,34 @@ def _construct_mapping(loader: _StrictLoader, node: yaml.MappingNode, deep: bool
 _StrictLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_mapping)
 
 
+# Nesting and size bounds checked on the event stream before any node is composed. PyYAML's event
+# parser is iterative; composing and constructing are recursive, so a small, deeply nested document
+# would otherwise exhaust the interpreter stack. Factory Core's own documents nest fewer than 10
+# levels; 64 leaves ample room while staying far below the recursion limit. 200,000 events covers
+# any document within the largest file size Factory Core reads as YAML.
+MAX_YAML_DEPTH = 64
+MAX_YAML_EVENTS = 200_000
+
+
+def _check_yaml_shape(text: str) -> None:
+    depth = 0
+    for count, event in enumerate(yaml.parse(text, Loader=yaml.SafeLoader), 1):
+        if count > MAX_YAML_EVENTS:
+            raise DocumentError("YAML_TOO_COMPLEX", f"more than {MAX_YAML_EVENTS} YAML events")
+        if isinstance(event, yaml.MappingStartEvent | yaml.SequenceStartEvent):
+            depth += 1
+            if depth > MAX_YAML_DEPTH:
+                raise DocumentError("YAML_TOO_COMPLEX", f"nested deeper than {MAX_YAML_DEPTH} levels")
+        elif isinstance(event, yaml.MappingEndEvent | yaml.SequenceEndEvent):
+            depth -= 1
+
+
 def parse_yaml(text: str) -> Any:
     try:
+        _check_yaml_shape(text)
         return yaml.load(text, Loader=_StrictLoader)  # noqa: S506 - strict SafeLoader subclass
+    except RecursionError as exc:
+        raise DocumentError("YAML_TOO_COMPLEX", "YAML nested too deeply to parse") from exc
     except yaml.YAMLError as exc:
         mark = getattr(exc, "problem_mark", None)
         where = f" (line {mark.line + 1}, column {mark.column + 1})" if mark is not None else ""
@@ -76,6 +101,8 @@ def _reject_constant(name: str) -> Any:
 def parse_json(text: str) -> Any:
     try:
         return json.loads(text, object_pairs_hook=_reject_duplicate_keys, parse_constant=_reject_constant)
+    except RecursionError as exc:
+        raise DocumentError("INVALID_JSON", "JSON nested too deeply to parse") from exc
     except json.JSONDecodeError as exc:
         raise DocumentError("INVALID_JSON", f"invalid JSON (line {exc.lineno}, column {exc.colno}): {exc.msg}") from exc
 

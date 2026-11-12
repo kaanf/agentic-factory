@@ -31,10 +31,10 @@ factory reconcile <project-dir> --task ID [--checkout DIR] (--live | --offline)
 
 | Exit | `preflight` | `reconcile` |
 |---|---|---|
-| 0 | every dry-run check passed. Unreachable in this version: the effective Archon provider is never established (`ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED`), so the best result is UNKNOWN (exit 1). Even a PASS would not be an authorization | reconciled; every fact needed was read (any state) |
+| 0 | every dry-run check passed. Unreachable in this version: the effective Archon provider is never established (`ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED`), so the best result is UNKNOWN (exit 1). Even a PASS would not be an authorization | reconciled to a well-established state (blocking or not: `NO_RUN`, `PR_OPEN`, `UNTRACKED_LOCAL_BRANCH`, ...) |
 | 1 | the dry run did not pass (a check is FAIL or UNKNOWN) | – |
 | 2 | invalid project or snapshot | invalid project |
-| 3 | another coordinator holds the dispatch lock (refused before any evidence is collected or any request is made), or a live collection was incomplete | a fact was UNKNOWN, or the lock is held |
+| 3 | another coordinator holds the dispatch lock (refused before any evidence is collected or any request is made), or a live collection was incomplete | the state is `UNKNOWN`, `UNCERTAIN` or `COORDINATOR_ACTIVE`, or any finding is unknown or uncertain |
 | 64 | usage error (including any unknown option such as `--execute`) | usage error, or unknown task |
 | 70 | internal error | internal error |
 
@@ -241,7 +241,7 @@ finding is reported regardless.
 | 3 | any needed fact unreadable: GitHub failure, offline, no checkout, unreadable state (including a state root refused by the filesystem trust contract), the checkout's HEAD neither a branch nor an object id (`CHECKOUT_HEAD_UNKNOWN`), lock unknown | `UNKNOWN` | yes | make the facts readable |
 | 4 | an older revision's PR is open | `SUPERSEDED_PR_OPEN` | yes | close it or revert the revision bump; it never counts for this revision |
 | 5 | no record; remote branch or any PR exists | `UNTRACKED_BRANCH` | yes | adopt (manual) or remove the branch yourself |
-| 6 | no record; local branch or worktree only | `UNTRACKED_LOCAL_BRANCH` | yes | inspect; finish or remove (`archon complete`) |
+| 6 | no record; local branch, or the branch checked out by the primary HEAD or a worktree | `UNTRACKED_LOCAL_BRANCH` (a HEAD naming the branch with no resolvable ref is `HEAD_TARGET_UNRESOLVED`, row 2) | yes | inspect; finish or remove (`archon complete`) |
 | 7 | records; current PR merged | `PR_MERGED` | yes | none |
 | 8 | records; current PR open | `PR_OPEN` | yes | review |
 | 9 | records; last outcome abandoned | `ABANDONED` (plus `BRANCH_PRESENT_AFTER_ABANDON` while the branch exists) | yes | remove the branch before another attempt |
@@ -249,7 +249,7 @@ finding is reported regardless.
 | 11 | records; exited non-zero, no PR | `RUN_FAILED` | yes | revise or decide on another attempt; never retried |
 | 12 | records; exited 0 or adopted, no PR | `NO_PR` (plus `BRANCH_NOT_PUSHED` when not on GitHub) | yes | open a PR yourself or abandon; never retried |
 | 13 | rows 9-12 with attempts used ≥ `maxAttemptsPerTaskRevision` | `ATTEMPTS_EXHAUSTED` | yes | revise the task (new revision) |
-| 14 | nothing anywhere | `NO_RUN` | no | none |
+| 14 | every absence fact affirmatively established (see Observation integrity) | `NO_RUN`; otherwise `UNKNOWN` with `ABSENCE_NOT_ESTABLISHED` | no | none |
 
 Older revisions are examined for PRs, branches and records (up to 50 back; earlier ones make the
 result UNKNOWN via `HISTORY_TRUNCATED`). A merged older revision appears only under `history` as
@@ -282,7 +282,48 @@ actions above are manual.
 | TOCTOU between validation and command | command built from the in-memory project the checks used; manifest and task re-hashed at the end; hashes and command digest in the report | file changed mid-preflight → `INPUT_CHANGED_DURING_PREFLIGHT` |
 | Evidence trust | authorization structurally never granted | simulated READY, every provenance, `dispatch.enabled` bypass |
 
-## Filesystem trust contract
+## Observation integrity
+
+Three security reviews of this stage found false absences: an observation that was dropped, unread,
+read from the wrong object or read at a different moment silently produced `NO_RUN` or PASS. The
+structural cause was that `NO_RUN` was the fall-through when no finding was raised, so every
+observation failure that did not raise its own finding increased confidence. Each earlier fix
+patched one producer of findings. This section is the model that now holds instead.
+
+**Invariants.**
+
+1. `NO_RUN` requires complete, coherent, affirmative evidence of absence.
+2. Every relevant unknown or contradictory observation blocks reconciliation (UNKNOWN / UNCERTAIN,
+   exit 3).
+3. A selected filesystem object cannot silently be replaced by another between listing and reading.
+4. Filesystem permissions are not evidence of object identity, and unsafe or unevaluable permissions
+   never establish trust.
+5. Stage 5 never authorizes or performs execution.
+
+**Transitions.** Each local or remote fact is tri-state: present (`True`), absent (`False`, only
+from a complete observation), unknown (`None`). Findings carry a result: `INFO` (never affects the
+state), `BLOCKING`, `UNKNOWN`, `UNCERTAIN`. The state is `COORDINATOR_ACTIVE` if the lock is held;
+otherwise `UNCERTAIN` if any finding is uncertain, `UNKNOWN` if any is unknown, then the
+well-established states of the decision table. `NO_RUN` is additionally guarded by
+`_absence_established`: lock absent or free, current-revision records readable and empty, every
+examined revision's records free of problems, every examined revision's pull requests read, no
+records for newer revisions, and the current branch's local ref, checked-out state, remote branch
+and pull-request list each explicitly absent. If any fails, the state is `UNKNOWN`
+(`ABSENCE_NOT_ESTABLISHED`) even if no finding said so. `blocksDispatch` is false only for `NO_RUN`.
+
+**Where false absence came from, and what holds now.**
+
+| Pattern | Sites found | Now |
+|---|---|---|
+| A missing key or collection entry read as absence | local occupancy ignored the primary HEAD (S1) | one occupancy for refs, primary HEAD and worktrees, used by reconcile and preflight; a HEAD naming a branch with no resolvable ref is UNCERTAIN |
+| A malformed file ignored | refs and worktree metadata (F1) | kept as present-but-unresolved or unknown |
+| A failed read becoming an empty collection | records of a replaced directory (S2) | integrity failures make the whole observation unreadable |
+| A partial listing taken as complete | directory enumeration | a listing is complete only if the directory did not change while enumerated |
+| A path reopened after inspection | every `ConfinedTree` call re-walked from the root by name (S2; also git refs, worktrees, workflow files) | identity ledger: every later open must find the recorded device and inode |
+| Observations from different moments combined | `read_checkout`, `read_task_records`, Archon readers | `verify()` re-checks every observation at the end of the logical read |
+| An informational note suppressing a blocking condition | HEAD state (R1) | task-relevant conditions are UNKNOWN or UNCERTAIN, never INFO |
+
+## Filesystem identity and trust contract
 
 Everything Stage 5 reads outside the project (run records, checkout git metadata and Archon
 configuration, Archon's home) goes through `fsread.ConfinedTree`:
@@ -290,16 +331,50 @@ configuration, Archon's home) goes through `fsread.ConfinedTree`:
 | Term | Meaning |
 |---|---|
 | Configured path | The string from the command line or default. Untrusted; relative paths are anchored at the working directory |
-| Mutable ancestors | Every directory the walk looks inside, the root included. Each must be owned by root or the current user; not world-writable unless sticky; not group-writable unless sticky or its group can contain no one but the current user (a user private group, as with umask 002 on Ubuntu and GitHub runners; group members and accounts with that primary group are enumerated, and a failed lookup counts as shared). In a sticky directory shared with others, the entry used must be owned by root or the current user. So no other principal can rename a component |
 | Symbolic links in the configured path | Followed only if the link and its directory are owned by root, the directory is not group- or world-writable, and the target is relative (at most 40). Anything else: `ROOT_PATH_SYMLINK_UNTRUSTED` or `ROOT_PATH_SYMLINK_UNSUPPORTED` |
-| Root acquisition | One walk from `/`, each component opened relative to the previous descriptor; around each lookup the parent's modification and status-change times and the entry's device and inode must not change, otherwise `ROOT_CHANGED_DURING_ACQUISITION`. Never retried, never redirected |
-| Validated root descriptor | The result. Every later read is relative to it with `O_NOFOLLOW` per component; renaming or replacing the path afterwards does not change the tree read |
+| Root acquisition | One walk from `/`, each component opened relative to the previous descriptor; around each lookup the parent's modification and status-change times and the entry's device and inode must not change (`ROOT_CHANGED_DURING_ACQUISITION`). Never retried, never redirected |
+| Identity ledger | Every object observed through one tree (traversed directory, listed entry, file read, entry found absent) is recorded with device, inode and type. Any later open of that path must find the same object (`IDENTITY_CHANGED`); below the root every step is descriptor-relative with `O_NOFOLLOW` and the opened object must be the one `lstat` found |
+| Complete listing | Enumeration of a directory is accepted only if its modification and status-change times did not change during it (`DIRECTORY_CHANGED`) |
+| Stable file | A file must not change while it is read (`FILE_CHANGED`) |
+| Coherent snapshot | `verify()` at the end of `read_task_records`, `read_checkout` and each Archon reader re-checks every observation: listed directories unchanged, files unchanged, absences still absent (`TREE_CHANGED`) |
+| Budgets | Per tree: objects observed and bytes read (`BUDGET_EXCEEDED`); run records 10,000 objects and 16 MiB (rationale in `runs.py`), other trees 250,000 objects and 64 MiB |
 
-A refusal is an observation failure, never an empty result: run records become unreadable
-(`STATE_UNREADABLE`, reconcile UNKNOWN/UNCERTAIN), checkout facts unknown, Archon facts unknown.
-Out of scope: a process running as the current user that changes the path before the walk reaches a
-component (it is the operator's own principal; 4B P2 moves agents to another OS user), and
-modifications of the tree's contents (handled by the per-file rules above).
+Integrity codes (`INTEGRITY_CODES`) never mean "absent": run records become unreadable (reconcile
+UNKNOWN or UNCERTAIN), checkout facts unknown, Archon facts unknown.
+
+### Permission and ACL trust model
+
+Applied to every directory the root walk looks inside and to every directory and file opened below
+the root:
+
+- owned by root or the current user;
+- not group- or world-writable, except a directory with the sticky bit;
+- no ACL grants another principal a modifying right.
+
+Group membership is never used to establish trust. Whether a group contains only the current user
+cannot be established authoritatively with the system interfaces available: macOS has implicit
+groups (`everyone`, gid 12, has no listed members but contains every user), nested and
+directory-service groups exist on both platforms. A group-writable object is therefore refused,
+whatever its group (S3).
+
+ACLs: on macOS every extended ACL entry is read through libc (`acl_get_fd_np`; the ABI was verified
+against real `chmod +a` ACLs). Any *allow* entry with a modifying right (write or add file, append or
+add subdirectory, delete, delete child, write attributes, write extended attributes, write security,
+change owner) is refused, whoever it names, including the owner; *deny* entries only restrict and are
+accepted (macOS home directories carry `group:everyone deny delete`). On Linux, POSIX access ACL
+entries for other principals are limited by the ACL mask, which is the group-class mode bits, so the
+mode check covers them; NFSv4 and rich ACLs are not evaluated and are refused. Any platform where
+ACLs cannot be evaluated, and any ACL that cannot be read, fails closed (`PERMISSIONS_UNVERIFIABLE`).
+Linux ACL behavior is covered by a CI test only when `setfacl` is available there; it is not claimed
+verified by the macOS tests.
+
+**Operational consequence.** Hosts with umask 002 (Ubuntu user private groups, GitHub runners)
+create group-writable checkouts and state, which Factory Core refuses. Use umask 022 (or remove group
+write) for checkouts, the state directory and Archon's home. The test suite builds its fixtures with
+umask 022 and tests the refusal of group-writable objects explicitly.
+
+Out of scope: a process running as the current user that changes a path before it is first observed
+(the operator's own principal; 4B P2 moves agents to another OS user).
 
 ## Limitations
 
@@ -308,6 +383,9 @@ modifications of the tree's contents (handled by the per-file rules above).
 - **The effective provider is not established.** Archon's database-held layers (per-user AI
   preferences, per-codebase settings) can change it and are not readable; every preflight is
   therefore at best UNKNOWN.
+- **Parsing is bounded.** YAML is limited to 64 levels and 200,000 events, checked on the iterative
+  event stream before any node is composed (`YAML_TOO_COMPLEX`); deeply nested JSON is refused
+  instead of exhausting the stack.
 - **Configured paths must be real paths.** A symbolic link the current user owns anywhere in
   `--checkout`, `--state-dir` or `--archon-home` is refused; only root-controlled relative system
   links (macOS `/tmp`, `/var`, `/etc`; merged `/usr` on Linux) are followed.

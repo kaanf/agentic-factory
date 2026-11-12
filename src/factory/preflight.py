@@ -239,6 +239,12 @@ def _checkout_checks(checkout: CheckoutState | None, branch: str) -> list[Check]
         ),
         (checkout.worktree_state(branch), "FEATURE_WORKTREE_EXISTS", "FEATURE_WORKTREE_UNKNOWN", "a worktree"),
         (
+            checkout.checked_out_state(branch),
+            "FEATURE_BRANCH_CHECKED_OUT",
+            "FEATURE_CHECKOUT_UNKNOWN",
+            "a checked-out branch (primary HEAD or a worktree)",
+        ),
+        (
             checkout.remote_tracking_state(branch),
             "REMOTE_TRACKING_BRANCH_EXISTS",
             "REMOTE_TRACKING_UNKNOWN",
@@ -257,6 +263,8 @@ def _checkout_checks(checkout: CheckoutState | None, branch: str) -> list[Check]
     why = checkout.local.unresolved.get(branch)
     if why is not None:
         checks.append(_fail("LOCAL_REF_UNRESOLVED", f"local ref {branch} {why}", branch))
+    if checkout.head_target_unresolved(branch):
+        checks.append(_fail("HEAD_TARGET_UNRESOLVED", f"HEAD names {branch}, but no ref for it resolves", branch))
     return checks
 
 

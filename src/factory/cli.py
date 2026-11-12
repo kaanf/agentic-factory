@@ -18,8 +18,9 @@ Exit codes:
 
 preflight additionally exits 1 when the dry run did not pass (any check FAIL or UNKNOWN), and 3 when
 another coordinator holds the dispatch lock. Exit 0 means only that the dry run passed: the report's
-authorization is never granted. reconcile exits 3 when a fact needed for its decision is unknown
-or the lock is held, and 0 otherwise, whatever the state.
+authorization is never granted. reconcile exits 3 when its state is UNKNOWN, UNCERTAIN or
+COORDINATOR_ACTIVE (or any finding is unknown or uncertain), and 0 for every other, well-established
+state, blocking or not.
 """
 
 from __future__ import annotations
@@ -331,8 +332,9 @@ def _reconcile(args: argparse.Namespace, out: TextIO, err: TextIO, transport: Tr
     decision = decide(observations)
     document = reconcile_document(task, repo, decision, observations)
     out.write(to_json(document) if args.format == "json" else reconcile_text(document))
-    unknown = any(f.result == "UNKNOWN" for f in decision.findings)
-    return EXIT_INCOMPLETE if unknown or decision.state is ReconcileState.COORDINATOR_ACTIVE else EXIT_OK
+    unknown = any(f.result in ("UNKNOWN", "UNCERTAIN") for f in decision.findings)
+    unsafe = decision.state in (ReconcileState.UNKNOWN, ReconcileState.UNCERTAIN, ReconcileState.COORDINATOR_ACTIVE)
+    return EXIT_INCOMPLETE if unknown or unsafe else EXIT_OK
 
 
 def run(

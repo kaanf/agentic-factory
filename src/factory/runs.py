@@ -32,11 +32,18 @@ from pathlib import Path
 from typing import Any
 
 from factory.documents import DocumentError, parse_json
-from factory.fsread import ConfinedTree, FsError
+from factory.fsread import INTEGRITY_CODES, ConfinedTree, FsError
 from factory.refs import is_slug, is_task_id
 from factory.schemas.validation import validate_document
 
 RECORD_BYTES = 64 * 1024
+# Budgets for one task's records, enforced while reading. A revision holds at most
+# 2 x maxAttemptsPerTaskRevision (<= 10, schema maximum) record files, so 10,000 observed objects
+# cover more than 400 revisions at the attempt cap plus stray entries; 16 MiB is 256 records at
+# RECORD_BYTES (real records are well under 1 KiB). Exceeding either makes the records unreadable
+# (BUDGET_EXCEEDED), never an empty or truncated history.
+MAX_RECORD_OBJECTS = 10_000
+MAX_RECORD_BYTES = 16 * 1024 * 1024
 LOCK_FILE = "dispatch.lock"
 _ATTEMPT = re.compile(r"attempt-([1-9][0-9]{0,5})\.(intent|outcome)\.json")
 _REVISION = re.compile(r"r([1-9][0-9]{0,8})")
@@ -106,6 +113,8 @@ def _parse(tree: ConfinedTree, parts: tuple[str, ...], kind: str) -> tuple[dict[
         data = tree.read(*parts, max_bytes=RECORD_BYTES, single_link=True)
         document = parse_json(data.decode("utf-8"))
     except FsError as exc:
+        if exc.code in INTEGRITY_CODES:
+            raise  # the observation as a whole is unusable, not just this record
         code = {"SYMLINK": "RECORD_SYMLINK", "HARD_LINKED": "RECORD_HARD_LINKED", "TOO_LARGE": "RECORD_TOO_LARGE"}
         return None, code.get(exc.code, "RECORD_UNREADABLE"), exc.message
     except UnicodeDecodeError:
@@ -126,6 +135,8 @@ def _read_revision(
     try:
         entries = tree.list(*base)
     except FsError as exc:
+        if exc.code in INTEGRITY_CODES:
+            raise
         return RevisionRecords(revision, (), (Problem("RECORDS_UNREADABLE", revision, 0, exc.message),))
     for entry in entries:
         match = _ATTEMPT.fullmatch(entry.name)
@@ -178,34 +189,50 @@ def _read_revision(
 
 
 def read_task_records(state_root: Path, project: str, task: str) -> TaskRecords:
-    """Read every revision's records for one task. A missing directory means no records."""
+    """Read every revision's records for one task as one coherent observation.
+
+    A missing state root or task directory means no records, but only if that absence still holds
+    when the read ends. Any integrity failure (an observed object replaced, a listing that changed
+    while it was enumerated, unsafe permissions, an exceeded budget) makes the whole result
+    unreadable: it never yields an empty or partial history.
+    """
     if not is_slug(project) or not is_task_id(task):
         return TaskRecords(False, problems=(Problem("RECORD_PATH_UNSAFE", 0, 0, "project or task id is unsafe"),))
     try:
-        tree = ConfinedTree.open(state_root)
+        tree = ConfinedTree.open(state_root, max_entries=MAX_RECORD_OBJECTS, max_bytes=MAX_RECORD_BYTES)
     except FsError as exc:
         if exc.code == "NOT_FOUND":
             return TaskRecords(True)
         return TaskRecords(False, problems=(Problem("STATE_UNREADABLE", 0, 0, exc.message),))
     with tree:
-        base = (project, "runs", task)
         try:
-            entries = tree.list(*base)
+            result = _read_task(tree, project, task)
+            tree.verify()
         except FsError as exc:
-            if exc.code == "NOT_FOUND":
-                return TaskRecords(True)
-            return TaskRecords(False, problems=(Problem("STATE_UNREADABLE", 0, 0, exc.message),))
-        problems: list[Problem] = []
-        revisions: dict[int, RevisionRecords] = {}
-        for entry in entries:
-            match = _REVISION.fullmatch(entry.name)
-            if match is None or entry.kind != "directory":
-                code = "RECORD_SYMLINK" if entry.kind == "symlink" else "UNEXPECTED_ENTRY"
-                problems.append(Problem(code, 0, 0, f"unexpected entry {entry.name!r} ({entry.kind}) in {task}"))
-                continue
-            number = int(match.group(1))
-            revisions[number] = _read_revision(tree, (*base, entry.name), project, task, number)
-        return TaskRecords(True, dict(sorted(revisions.items())), tuple(sorted(problems)))
+            code = exc.code if exc.code in INTEGRITY_CODES else "STATE_UNREADABLE"
+            return TaskRecords(False, problems=(Problem(code, 0, 0, exc.message),))
+        return result
+
+
+def _read_task(tree: ConfinedTree, project: str, task: str) -> TaskRecords:
+    base = (project, "runs", task)
+    try:
+        entries = tree.list(*base)
+    except FsError as exc:
+        if exc.code == "NOT_FOUND":
+            return TaskRecords(True)
+        raise
+    problems: list[Problem] = []
+    revisions: dict[int, RevisionRecords] = {}
+    for entry in entries:
+        match = _REVISION.fullmatch(entry.name)
+        if match is None or entry.kind != "directory":
+            code = "RECORD_SYMLINK" if entry.kind == "symlink" else "UNEXPECTED_ENTRY"
+            problems.append(Problem(code, 0, 0, f"unexpected entry {entry.name!r} ({entry.kind}) in {task}"))
+            continue
+        number = int(match.group(1))
+        revisions[number] = _read_revision(tree, (*base, entry.name), project, task, number)
+    return TaskRecords(True, dict(sorted(revisions.items())), tuple(sorted(problems)))
 
 
 def probe_lock(state_root: Path, project: str) -> str:
