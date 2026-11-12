@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -319,6 +320,24 @@ def _digests(project: Project, task: Task | None) -> dict[str, str]:
     return inputs
 
 
+def _config_digest(text: str | None) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest() if text is not None else "unreadable"
+
+
+def _reread_config(checkout: Path, digest: str) -> list[Check]:
+    """The local Archon configuration must be unchanged since it was inspected."""
+    text, _ = archon.read_local_repo_config(checkout)
+    if _config_digest(text) != digest:
+        return [
+            _fail(
+                "INPUT_CHANGED_DURING_PREFLIGHT",
+                "the checkout's .archon/config.yaml changed while preflight ran; nothing is valid",
+                ".archon/config.yaml",
+            )
+        ]
+    return []
+
+
 def _reread(project: Project, task: Task | None) -> list[Check]:
     files = [MANIFEST_PATH] + ([task.file] if task is not None else [])
     for file in files:
@@ -413,6 +432,8 @@ def preflight(
     remote_checks, remote_text = _remote_config(api, project, task)
     checks.extend(remote_checks)
     repo_configs = [("local", text), ("integration branch", remote_text)]
+    for where, config_text in repo_configs:
+        checks.extend(_from(f) for f in archon.check_repo_config_keys(config_text, where))
     checks.extend(_from(f) for f in archon.check_effective_provider(assistant, install, repo_configs))
     checks.extend(_from(f) for f in archon.check_workflow_definitions(workflow, checkout, archon_home))
     checks.extend(_remote_branch(api, project, task, branch))
@@ -433,6 +454,9 @@ def preflight(
     if command is not None:
         checks.append(_passed("COMMAND_BUILT", "a command was built (dry run: not executed)"))
     checks.extend(_reread(project, task))
+    config_digest = _config_digest(text)
+    checks.extend(_reread_config(checkout, config_digest))
+    inputs = {**_digests(project, task), "archonRepoConfigSha256": config_digest}
     return Preflight(
         project,
         task,
@@ -441,6 +465,6 @@ def preflight(
         authorization(project, plan),
         reconciliation,
         plan,
-        _digests(project, task),
+        inputs,
         lock_held,
     )

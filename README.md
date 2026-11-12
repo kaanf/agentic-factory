@@ -119,7 +119,11 @@ Schemas: `src/factory/schemas/*.schema.json` (JSON Schema 2020-12, shipped insid
 - [Decision 0005](docs/decisions/0005-stage5-archon-adapter.md): Stage 5 decisions and deviations.
 - [Decision 0006](docs/decisions/0006-stage5-security-remediation.md): Stage 5 security review
   findings F1-F6 and their fixes.
-- [Archon probes](docs/probes/archon-probes.md): opt-in, bash-only probe procedure (not run).
+- [Decision 0007](docs/decisions/0007-stage5-second-remediation.md): second review findings R1-R3.
+- [Archon probes](docs/probes/archon-probes.md): why no executable probe ships, and the conditions
+  for a future approved manual probe (acceptance incomplete).
+- [Provider verification](docs/architecture/provider-verification.md): evidence, missing acceptance
+  criteria and a proposed read-only design.
 - [Technical debt](docs/technical-debt.md): known limitations and their classification.
 
 ## Development

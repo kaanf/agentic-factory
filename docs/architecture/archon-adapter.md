@@ -103,6 +103,8 @@ Fixed in code (`factory/archon.py`); a manifest can only narrow it.
   selected workflow could replace the reviewed bundled definition (`WORKFLOW_OVERRIDE_PRESENT`).
   Layer 4 cannot be read, so `ARCHON_DATABASE_AI_CONFIGURATION_UNOBSERVED` (UNKNOWN) is always
   reported: **the effective provider is never established and no preflight passes in Stage 5.**
+  Evidence, the acceptance criteria still missing, and a read-only design proposed for future
+  approval are in [provider-verification.md](provider-verification.md).
 
 ## The command
 
@@ -146,7 +148,7 @@ any is unknown, else PASS. Every applicable reason is reported.
 | Workflow definitions | `WORKFLOW_OVERRIDE_PRESENT`, `ARCHON_WORKFLOW_DEFINITIONS_UNREADABLE` |
 | Archon version | `ARCHON_VERSION_NOT_CONFIGURED`, `ARCHON_VERSION_UNSUPPORTED` (pin outside the adapter's verified set), `ARCHON_VERSION_UNKNOWN`, `ARCHON_HOME_UNREADABLE`, `ARCHON_VERSION_MISMATCH` |
 | Checkout | `NOT_A_CHECKOUT`, `CHECKOUT_UNREADABLE`, `CHECKOUT_UNSAFE`, `CHECKOUT_LAYOUT_UNSUPPORTED`, `GIT_METADATA_INVALID`, `GIT_METADATA_UNREADABLE`, `GIT_METADATA_TOO_LARGE`, `CHECKOUT_REMOTE_UNKNOWN`, `CHECKOUT_REPOSITORY_MISMATCH`, `CHECKOUT_ON_FEATURE_BRANCH`, `CHECKOUT_HEAD_UNKNOWN` |
-| Archon repository config | `ARCHON_REPO_CONFIG_MISSING`, `ARCHON_REPO_CONFIG_INVALID`, `ARCHON_REPO_CONFIG_UNSAFE`, `ARCHON_REPO_CONFIG_UNREADABLE`, `ARCHON_BASE_BRANCH_UNSET`, `ARCHON_BASE_BRANCH_MISMATCH`, and the same with `ARCHON_REMOTE_` for the integration branch on GitHub; `ARCHON_REMOTE_CONFIG_UNCHECKED` offline |
+| Archon repository config | `ARCHON_REPO_CONFIG_MISSING`, `ARCHON_REPO_CONFIG_INVALID`, `ARCHON_REPO_CONFIG_UNSAFE`, `ARCHON_REPO_CONFIG_UNREADABLE`, `ARCHON_BASE_BRANCH_UNSET`, `ARCHON_BASE_BRANCH_MISMATCH`, and the same with `ARCHON_REMOTE_` for the integration branch on GitHub; `ARCHON_REMOTE_CONFIG_UNCHECKED` offline. Structured allowlist for both copies: `ARCHON_REPO_HOOK_PRESENT` (`postCreate`, `postCreateTimeout`, `copyFiles`, `initSubmodules`), `ARCHON_REPO_CONFIG_KEY_NOT_ALLOWED` (any key other than `worktree.baseBranch`, `assistant`, `tiers`, `aliases`), `ARCHON_REPO_CONFIG_AMBIGUOUS` (anchors, aliases, merge keys, explicit tags), `ARCHON_REPO_CONFIG_INVALID` (malformed, duplicate keys, not a mapping) |
 | Branch state | `FEATURE_BRANCH_EXISTS_LOCAL`, `LOCAL_REF_UNRESOLVED`, `FEATURE_BRANCH_LOCAL_UNKNOWN`, `FEATURE_WORKTREE_EXISTS`, `FEATURE_WORKTREE_UNKNOWN`, `REMOTE_TRACKING_BRANCH_EXISTS`, `REMOTE_TRACKING_UNKNOWN`, `FEATURE_BRANCH_EXISTS_REMOTE`, `REMOTE_BRANCH_UNKNOWN`, `REMOTE_BRANCH_UNCHECKED` |
 
 Local branch facts are tri-state: `present`, `absent` or `unknown`, and only a confirmed absence
@@ -236,7 +238,7 @@ finding is reported regardless.
 |---|---|---|---|---|
 | 1 | dispatch lock held by another process | `COORDINATOR_ACTIVE` (nothing else is read, exit 3) | yes | none; retry reconcile later |
 | 2 | any contradiction: interrupted dispatch (intent, no outcome) in any revision, corrupt or contradictory records, records or branches for a newer revision, PR into the wrong base, several active PRs, checkout of another repository | `UNCERTAIN` | yes | inspect; for an interrupted run check `archon workflow runs`, then adopt or abandon (manual until Stage 6) |
-| 3 | any needed fact unreadable: GitHub failure, offline, no checkout, unreadable state, lock unknown | `UNKNOWN` | yes | make the facts readable |
+| 3 | any needed fact unreadable: GitHub failure, offline, no checkout, unreadable state (including a state root refused by the filesystem trust contract), the checkout's HEAD neither a branch nor an object id (`CHECKOUT_HEAD_UNKNOWN`), lock unknown | `UNKNOWN` | yes | make the facts readable |
 | 4 | an older revision's PR is open | `SUPERSEDED_PR_OPEN` | yes | close it or revert the revision bump; it never counts for this revision |
 | 5 | no record; remote branch or any PR exists | `UNTRACKED_BRANCH` | yes | adopt (manual) or remove the branch yourself |
 | 6 | no record; local branch or worktree only | `UNTRACKED_LOCAL_BRANCH` | yes | inspect; finish or remove (`archon complete`) |
@@ -275,10 +277,29 @@ actions above are manual.
 | GitHub read-only | existing GET-only transport; reconcile requests only `repos/<owner>/<repo>/...` | request log assertions |
 | No execution surface | CLI has no execute, dispatch, run, adopt, abandon, retry, merge, push, delete, force or yes options or commands | parser walk; `--execute` exits 64 |
 | Untrusted strings are data | full-match validators (`refs.py`), argv not shell, display round-trip, control and bidi characters refused | adversarial tests: `$(...)`, backticks, `;`, option-like text, trailing newlines that pass JSON Schema |
-| Filesystem confinement | `fsread.ConfinedTree`: the root is acquired by a descriptor-relative walk from `/` (symbolic links in the root's own path resolved with `readlinkat` from the descriptor holding them; no resolve-then-open), then per-component `O_NOFOLLOW` below it, regular files, bounded size, optional single link, `O_NONBLOCK` against FIFOs | directory replacement injected between acquisition steps (ancestor, parent, root, nested), symlink, hard-link, FIFO, traversal and size tests |
+| Filesystem confinement | `fsread.ConfinedTree` under the trust contract below: one descriptor-relative walk from `/`, no resolve-then-open and no restart; ancestors modifiable only by root or the current user; only root-controlled relative symbolic links followed; concurrent change around any lookup refused; per-component `O_NOFOLLOW` below the root, regular files, bounded size, optional single link, `O_NONBLOCK` against FIFOs | directory replacement injected before and after each acquisition step (ancestor, parent, root, entry identity), absolute/relative/chained/cyclic root links, shared writable ancestors, symlink, hard-link, FIFO, traversal and size tests; production `read_task_records` chain |
 | Bounded work | history window computed before allocation; only existing remote revisions are stored | revisions 1 to 1,000,000: bounded entries, requests and memory |
 | TOCTOU between validation and command | command built from the in-memory project the checks used; manifest and task re-hashed at the end; hashes and command digest in the report | file changed mid-preflight → `INPUT_CHANGED_DURING_PREFLIGHT` |
 | Evidence trust | authorization structurally never granted | simulated READY, every provenance, `dispatch.enabled` bypass |
+
+## Filesystem trust contract
+
+Everything Stage 5 reads outside the project (run records, checkout git metadata and Archon
+configuration, Archon's home) goes through `fsread.ConfinedTree`:
+
+| Term | Meaning |
+|---|---|
+| Configured path | The string from the command line or default. Untrusted; relative paths are anchored at the working directory |
+| Mutable ancestors | Every directory the walk looks inside, the root included. Each must be owned by root or the current user and not group- or world-writable unless sticky; in a sticky directory the entry used must be owned by root or the current user. So no other principal can rename a component |
+| Symbolic links in the configured path | Followed only if the link and its directory are owned by root, the directory is not group- or world-writable, and the target is relative (at most 40). Anything else: `ROOT_PATH_SYMLINK_UNTRUSTED` or `ROOT_PATH_SYMLINK_UNSUPPORTED` |
+| Root acquisition | One walk from `/`, each component opened relative to the previous descriptor; around each lookup the parent's modification and status-change times and the entry's device and inode must not change, otherwise `ROOT_CHANGED_DURING_ACQUISITION`. Never retried, never redirected |
+| Validated root descriptor | The result. Every later read is relative to it with `O_NOFOLLOW` per component; renaming or replacing the path afterwards does not change the tree read |
+
+A refusal is an observation failure, never an empty result: run records become unreadable
+(`STATE_UNREADABLE`, reconcile UNKNOWN/UNCERTAIN), checkout facts unknown, Archon facts unknown.
+Out of scope: a process running as the current user that changes the path before the walk reaches a
+component (it is the operator's own principal; 4B P2 moves agents to another OS user), and
+modifications of the tree's contents (handled by the per-file rules above).
 
 ## Limitations
 
@@ -287,6 +308,9 @@ actions above are manual.
 - **The effective provider is not established.** Archon's database-held layers (per-user AI
   preferences, per-codebase settings) can change it and are not readable; every preflight is
   therefore at best UNKNOWN.
+- **Configured paths must be real paths.** A symbolic link the current user owns anywhere in
+  `--checkout`, `--state-dir` or `--archon-home` is refused; only root-controlled relative system
+  links (macOS `/tmp`, `/var`, `/etc`; merged `/usr` on Linux) are followed.
 - **The root path itself is configuration.** `ConfinedTree` pins the tree once its walk reaches it;
   a directory replaced *before* the walk reaches it simply changes what the configured path names.
   Use paths whose ancestors only you can write.
@@ -298,7 +322,8 @@ actions above are manual.
   as remote evidence.
 - **Linked-worktree and reftable checkouts** are unsupported (UNKNOWN).
 - **Single host only.** Work started from another host is visible only once it reaches GitHub.
-- **Archon behavior assumptions to confirm with the probe** ([archon-probes.md](../probes/archon-probes.md)):
+- **Archon behavior assumptions not re-observed** (the executable probe was removed; see
+  [archon-probes.md](../probes/archon-probes.md)):
   `--base` sets both the worktree start point and `$BASE_BRANCH`; arguments after the workflow name are
   joined into the message; no option inside the single message argument is parsed.
 
@@ -320,5 +345,5 @@ temporary file, fsync and rename; action-time revalidation of heads, approvals, 
 command digest and the Archon binary; establishing the effective Archon provider including its
 database-held layers (a documented read interface, or per-user preferences provably disabled for the
 agent OS user); refusal when the agent environment's GitHub identity is an
-approver; `dispatch.enabled` set only by a human-merged PR; the probe procedure passed for the pinned
+approver; `dispatch.enabled` set only by a human-merged PR; the live probe acceptance item met (by an approved manual procedure) for the pinned
 Archon version in every repository.

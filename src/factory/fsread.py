@@ -4,12 +4,26 @@ Used for everything Stage 5 reads outside the project directory: run records und
 directory, git metadata and Archon configuration in a local checkout, and Archon's install record.
 Those trees are writable by other processes, so:
 
-- The root is acquired by walking its path one component at a time from ``/`` (or the working
-  directory), each step relative to the descriptor of the step before. A symbolic link in the root's
-  own path is resolved with ``readlink`` relative to the descriptor that holds it, and the walk
-  continues from there; there is no separate resolve-then-open step, so replacing an ancestor
-  directory while the root is acquired cannot redirect the result into another tree. The root's
-  displayed path is the sequence of directories actually opened.
+- The root is acquired by one walk of its configured path, from ``/``, each component opened
+  relative to the descriptor of the one before (relative paths are anchored at the working
+  directory). There is no resolve-then-open step and no restart from ``/``. Trust contract:
+
+  * every directory the walk looks inside, the root included, must be modifiable only by root or
+    the current user: owned by one of them, and not group- or world-writable unless sticky; inside a
+    sticky directory the entry used must be owned by root or the current user (others cannot rename
+    it). Another principal therefore cannot swap any component of the path;
+  * a symbolic link in the configured path is followed only if root controls it (the link and its
+    directory are owned by root and the directory is not group- or world-writable) and its target is
+    relative, as for ``/tmp``, ``/var`` and ``/etc`` on macOS or merged ``/usr`` on Linux; any other
+    link, and any absolute target, is refused (``ROOT_PATH_SYMLINK_UNTRUSTED``,
+    ``ROOT_PATH_SYMLINK_UNSUPPORTED``). At most 40 links are followed;
+  * around each lookup, the parent directory must not change (modification and status-change times)
+    and the entry found by ``lstat`` must be the directory opened (device and inode); otherwise the
+    acquisition is refused (``ROOT_CHANGED_DURING_ACQUISITION``), never retried or redirected.
+
+  The root's displayed path is the sequence of directories actually opened. A process running as the
+  current user can still change the path before the walk reaches a component; that is the same
+  principal as the operator, and is addressed by running agents as another OS user (4B P2).
 - Below the root every lookup is relative to the root's descriptor, one component at a time, with
   ``O_NOFOLLOW``: a symbolic link anywhere below the root is refused, never followed, so nothing
   outside the root can be reached. Once acquired, the root is pinned by its descriptor: renaming or
@@ -75,15 +89,35 @@ def _kind(mode: int) -> str:
     return "other"
 
 
+def _writable_by_others(info: os.stat_result) -> bool:
+    return bool(info.st_mode & 0o022)
+
+
+def _trusted_owner(uid: int) -> bool:
+    return uid in (0, os.geteuid())
+
+
+def _check_directory(fd: int, text: str) -> os.stat_result:
+    """Refuse a directory that a principal other than root or the current user could modify."""
+    info = os.fstat(fd)
+    if not _trusted_owner(info.st_uid) or (_writable_by_others(info) and not info.st_mode & stat.S_ISVTX):
+        raise FsError(
+            "ROOT_PATH_UNSAFE",
+            f"{text}: a directory on the path can be modified by another user (owner {info.st_uid}, "
+            f"mode {stat.S_IMODE(info.st_mode):o})",
+        )
+    return info
+
+
 def _acquire(text: str) -> tuple[int, list[str]]:
-    """Open the directory ``text`` names, walking it relative to held descriptors. Returns the
-    descriptor and the names of the directories opened from ``/``. Raises ``FsError``."""
-    if text.startswith("/"):
-        fd, names = os.open("/", _DIR_FLAGS), []
-    else:
-        fd = os.open(".", _DIR_FLAGS)
-        names = [part for part in os.getcwd().split("/") if part]
-    pending = [part for part in text.split("/")][::-1]  # a stack: next component last
+    """Open the directory ``text`` names under the trust contract in the module docstring.
+
+    Returns the root descriptor and the names of the directories opened from ``/``. Raises ``FsError``.
+    """
+    if not text.startswith("/"):
+        text = os.getcwd().rstrip("/") + "/" + text
+    stack: list[tuple[int, str]] = [(os.open("/", _DIR_FLAGS), "")]
+    pending = text.split("/")[::-1]  # a stack: next component last
     links = 0
     try:
         while pending:
@@ -91,47 +125,68 @@ def _acquire(text: str) -> tuple[int, list[str]]:
             if part in ("", "."):
                 continue
             if part == "..":
-                parent = os.open("..", _DIR_FLAGS, dir_fd=fd)
-                os.close(fd)
-                fd = parent
-                if names:
-                    names.pop()
+                if len(stack) > 1:
+                    os.close(stack.pop()[0])
                 continue
+            parent = stack[-1][0]
+            before = _check_directory(parent, text)
             try:
-                child = os.open(part, _DIR_FLAGS, dir_fd=fd)
+                entry = os.stat(part, dir_fd=parent, follow_symlinks=False)
             except FileNotFoundError as exc:
                 raise FsError("NOT_FOUND", f"{text} does not exist") from exc
             except OSError as exc:
-                try:
-                    is_link = stat.S_ISLNK(os.stat(part, dir_fd=fd, follow_symlinks=False).st_mode)
-                except OSError:
-                    is_link = False
-                if not is_link:
-                    if exc.errno == errno.ENOTDIR:
-                        raise FsError("NOT_A_DIRECTORY", f"{text} is not a directory") from exc
-                    raise FsError("UNREADABLE", f"{text} is not readable: {exc.strerror}") from exc
+                raise FsError("UNREADABLE", f"{text} is not readable: {exc.strerror}") from exc
+            if _writable_by_others(before) and not _trusted_owner(entry.st_uid):
+                raise FsError("ROOT_PATH_UNSAFE", f"{text}: {part!r} in a shared directory belongs to another user")
+            if stat.S_ISLNK(entry.st_mode):
+                if entry.st_uid != 0 or before.st_uid != 0 or _writable_by_others(before):
+                    raise FsError(
+                        "ROOT_PATH_SYMLINK_UNTRUSTED",
+                        f"{text}: {part!r} is a symbolic link not controlled by root; configure the real path",
+                    )
                 links += 1
                 if links > _MAX_SYMLINKS:
-                    raise FsError("UNREADABLE", f"{text}: too many levels of symbolic links") from exc
+                    raise FsError("UNREADABLE", f"{text}: too many levels of symbolic links")
                 try:
-                    target = os.readlink(part, dir_fd=fd)
-                except OSError as inner:
-                    raise FsError("UNREADABLE", f"{text} is not readable: {inner.strerror}") from inner
-                if "\0" in target or not target:
-                    raise FsError("UNSAFE_PATH", f"{text}: unusable symbolic link") from exc
-                if target.startswith("/"):
-                    root = os.open("/", _DIR_FLAGS)
-                    os.close(fd)
-                    fd, names = root, []
+                    target = os.readlink(part, dir_fd=parent)
+                except OSError as exc:
+                    raise FsError("UNREADABLE", f"{text} is not readable: {exc.strerror}") from exc
+                if not target or "\0" in target or target.startswith("/"):
+                    raise FsError(
+                        "ROOT_PATH_SYMLINK_UNSUPPORTED",
+                        f"{text}: {part!r} has an absolute or unusable target; configure the real path",
+                    )
                 pending.extend(target.split("/")[::-1])
                 continue
-            os.close(fd)
-            fd = child
-            names.append(part)
+            if not stat.S_ISDIR(entry.st_mode):
+                raise FsError("NOT_A_DIRECTORY", f"{text} is not a directory")
+            try:
+                child = os.open(part, _DIR_FLAGS, dir_fd=parent)
+            except OSError as exc:
+                raise FsError(
+                    "ROOT_CHANGED_DURING_ACQUISITION", f"{text}: {part!r} changed while it was opened"
+                ) from exc
+            opened = os.fstat(child)
+            after = os.fstat(parent)
+            if (opened.st_dev, opened.st_ino) != (entry.st_dev, entry.st_ino) or (
+                after.st_mtime_ns,
+                after.st_ctime_ns,
+            ) != (before.st_mtime_ns, before.st_ctime_ns):
+                os.close(child)
+                raise FsError(
+                    "ROOT_CHANGED_DURING_ACQUISITION", f"{text}: the path changed while the root was acquired"
+                )
+            stack.append((child, part))
+        _check_directory(stack[-1][0], text)
     except BaseException:
-        os.close(fd)
+        for fd, _ in stack:
+            os.close(fd)
         raise
-    return fd, names
+    names = [name for _, name in stack[1:]]
+    root = stack.pop()[0]
+    for fd, _ in stack:
+        os.close(fd)
+    return root, names
 
 
 class ConfinedTree:

@@ -582,6 +582,12 @@ def observe(
     if checkout is not None:
         own = [_revision_branch(repo, task, r) for r in range(max(1, task.revision - MAX_HISTORY), task.revision + 1)]
         findings.extend(_local_ref_findings(checkout, own))
+        if not checkout.head_known:
+            # A HEAD that is neither a branch reference nor an object id: which branch the checkout
+            # has checked out (possibly this task's) is unknown, so absence cannot be confirmed.
+            findings.append(
+                _unknown("CHECKOUT_HEAD_UNKNOWN", "the checkout's HEAD is neither a branch reference nor an object id")
+            )
         prefix = f"{repo.feature_prefix}{task.id}-r"
         for name in checkout.local.names():
             suffix = name[len(prefix) :] if name.startswith(prefix) else ""

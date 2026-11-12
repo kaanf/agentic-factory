@@ -231,6 +231,7 @@ def test_inputs_are_bound_to_the_report(env: Env) -> None:
     project = load_project(env.project).project
     assert project is not None
     assert document["inputs"] == {
+        "archonRepoConfigSha256": hashlib.sha256((env.checkout / ".archon/config.yaml").read_bytes()).hexdigest(),
         "manifestSha256": project.digests["factory/project.yaml"],
         "taskSha256": project.digests["factory/tasks/APP-1.yaml"],
     }

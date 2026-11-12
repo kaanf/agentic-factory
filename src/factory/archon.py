@@ -29,6 +29,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from factory.documents import DocumentError, parse_json, parse_yaml
 from factory.fsread import ConfinedTree, FsError
 from factory.model import Dispatch, Repository, Task
@@ -434,6 +436,81 @@ def check_workflow_definitions(workflow: str | None, checkout: Path, home: Path)
                     findings.extend(_scan_definitions(tree, base, workflow, f"{label} {'/'.join(base)}"))
         except FsError as exc:
             findings.append(_unknown("ARCHON_WORKFLOW_DEFINITIONS_UNREADABLE", f"{label}: {exc.message}"))
+    return findings
+
+
+# Repository configuration keys this adapter has reviewed. Everything else (worktree hooks and file
+# copies, environment, workflow, command and default settings, docs, container, remote) is refused:
+# Archon applies it when it creates the worktree or starts the run.
+_ALLOWED_TOP_LEVEL = frozenset({"worktree", "assistant", "tiers", "aliases"})
+_ALLOWED_WORKTREE = frozenset({"baseBranch"})
+_HOOK_KEYS = frozenset({"postCreate", "postCreateTimeout", "copyFiles", "initSubmodules"})
+
+
+def _ambiguous_yaml(text: str) -> str | None:
+    """A construct whose meaning parsers may disagree on (Factory Core uses PyYAML, Archon Bun's YAML),
+    or None. Anchors, aliases, merge keys and explicit tags are refused outright."""
+    for event in yaml.parse(text, Loader=yaml.SafeLoader):
+        if isinstance(event, yaml.AliasEvent):
+            return "an alias"
+        if getattr(event, "anchor", None) is not None:
+            return "an anchor"
+        if isinstance(event, yaml.ScalarEvent):
+            if event.tag is not None and not any(event.implicit):
+                return "an explicit tag"
+            if event.value == "<<" and event.style is None:
+                return "a merge key"
+        elif isinstance(event, yaml.MappingStartEvent | yaml.SequenceStartEvent):
+            if event.tag is not None and not event.implicit:
+                return "an explicit tag"
+    return None
+
+
+def check_repo_config_keys(text: str | None, where: str) -> list[Finding]:
+    """Structured allowlist check of a repository ``.archon/config.yaml`` (never text matching).
+
+    The document must be one plain YAML mapping with unique keys, no anchors, aliases, merge keys or
+    explicit tags, and only reviewed keys: ``worktree.baseBranch``, plus ``assistant``, ``tiers`` and
+    ``aliases`` (checked separately against the task's provider). A text that could not be read is
+    reported elsewhere.
+    """
+    if text is None:
+        return []
+    label = f"{where} .archon/config.yaml"
+    try:
+        construct = _ambiguous_yaml(text)
+        document = parse_yaml(text)
+    except yaml.YAMLError as exc:
+        return [_fail("ARCHON_REPO_CONFIG_INVALID", f"{label}: invalid YAML: {getattr(exc, 'problem', exc)}")]
+    except DocumentError as exc:
+        return [_fail("ARCHON_REPO_CONFIG_INVALID", f"{label}: {exc.message}")]
+    if construct is not None:
+        return [_fail("ARCHON_REPO_CONFIG_AMBIGUOUS", f"{label} uses {construct}; only plain YAML is accepted")]
+    if not isinstance(document, dict):
+        return [_fail("ARCHON_REPO_CONFIG_INVALID", f"{label} is not a mapping")]
+    findings: list[Finding] = []
+
+    def refuse(key: Any, path: str) -> None:
+        if key in _HOOK_KEYS:
+            findings.append(
+                _fail("ARCHON_REPO_HOOK_PRESENT", f"{label} sets {path}, which Archon runs or copies", path)
+            )
+        else:
+            findings.append(
+                _fail("ARCHON_REPO_CONFIG_KEY_NOT_ALLOWED", f"{label} sets {path}, which is not reviewed", path)
+            )
+
+    for key, value in document.items():
+        if not isinstance(key, str) or key not in _ALLOWED_TOP_LEVEL:
+            refuse(key, repr(key) if not isinstance(key, str) else key)
+            continue
+        if key == "worktree":
+            if not isinstance(value, dict):
+                findings.append(_fail("ARCHON_REPO_CONFIG_INVALID", f"{label}: worktree is not a mapping"))
+                continue
+            for inner in value:
+                if not isinstance(inner, str) or inner not in _ALLOWED_WORKTREE:
+                    refuse(inner, f"worktree.{inner}")
     return findings
 
 
