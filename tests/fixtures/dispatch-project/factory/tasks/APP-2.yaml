@@ -1,0 +1,11 @@
+schemaVersion: factory.task/v1
+id: APP-2
+revision: 1
+title: Import items from CSV
+repository: app
+kind: implementation
+specification: {path: specs/import.md, sha256: 5ed52f3f75bea8eb3080f313e7a96a56ccc48052c43e571c3ad6cd20bf2bb53e}
+architecture: {profile: app-arch, profileRevision: 1}
+execution: {workflow: archon-implement, provider: codex}
+acceptance:
+  - Rows with missing names are rejected

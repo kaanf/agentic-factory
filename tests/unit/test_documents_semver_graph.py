@@ -164,3 +164,45 @@ def test_snapshot_provenance_is_limited_to_known_kinds() -> None:
         assert validate_document("evidence", {**base, "provenance": {"kind": kind}}, "s.json") == []
     issues = validate_document("evidence", {**base, "provenance": {"kind": "verified"}}, "s.json")
     assert [(i.code, i.field) for i in issues] == [("INVALID_VALUE", "provenance.kind")]
+
+
+# -- bounded parsing (S4) ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "a: " + "[" * 5000 + "]" * 5000,
+        "a: " + "{b: " * 3000 + "1" + "}" * 3000,
+        "\n".join(f"{'  ' * i}k{i}:" for i in range(100)) + " x",
+    ],
+    ids=["flow-sequences", "flow-mappings", "block-mappings"],
+)
+def test_deeply_nested_yaml_is_refused_without_recursion(text: str) -> None:
+    from factory.documents import DocumentError, parse_yaml
+
+    with pytest.raises(DocumentError) as info:
+        parse_yaml(text)
+    assert info.value.code == "YAML_TOO_COMPLEX"
+
+
+def test_yaml_within_the_bounds_still_parses() -> None:
+    from factory.documents import MAX_YAML_DEPTH, parse_yaml
+
+    nested = "a: " + "[" * (MAX_YAML_DEPTH - 1) + "]" * (MAX_YAML_DEPTH - 1)
+    assert parse_yaml(nested) is not None
+
+
+def test_yaml_with_too_many_events_is_refused() -> None:
+    from factory.documents import MAX_YAML_EVENTS, DocumentError, parse_yaml
+
+    with pytest.raises(DocumentError) as info:
+        parse_yaml("k: [" + "1," * MAX_YAML_EVENTS + "1]")
+    assert info.value.code == "YAML_TOO_COMPLEX"
+
+
+def test_deeply_nested_json_is_refused_without_crashing() -> None:
+    from factory.documents import DocumentError, parse_json
+
+    with pytest.raises(DocumentError):
+        parse_json("[" * 100_000 + "]" * 100_000)

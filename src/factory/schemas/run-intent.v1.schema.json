@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory.run-intent/v1",
+  "title": "Factory dispatch intent record v1",
+  "description": "Written by a future dispatch (Stage 6) with O_CREAT|O_EXCL and fsync before Archon starts, as attempt-N.intent.json under <state>/<project>/runs/<task>/r<revision>/. Stage 5 only reads it. An intent without an outcome means the dispatch may still be running or was interrupted.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "project", "task", "revision", "attempt", "repository", "branch", "base", "workflow", "provider", "host", "createdAt"],
+  "properties": {
+    "schemaVersion": {"const": "factory.run-intent/v1"},
+    "project": {"$ref": "#/$defs/slug"},
+    "task": {"type": "string", "maxLength": 80, "pattern": "^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$"},
+    "revision": {"type": "integer", "minimum": 1},
+    "attempt": {"type": "integer", "minimum": 1},
+    "repository": {"$ref": "#/$defs/slug"},
+    "branch": {"$ref": "#/$defs/branch"},
+    "base": {"$ref": "#/$defs/branch"},
+    "workflow": {"$ref": "#/$defs/name"},
+    "provider": {"$ref": "#/$defs/name"},
+    "host": {"description": "Host name of the coordinator that wrote the record.", "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[A-Za-z0-9._-]+$"},
+    "createdAt": {"$ref": "#/$defs/timestamp"},
+    "commandDigest": {"description": "SHA-256 of the structured command the dispatch ran.", "type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 64},
+    "name": {"type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)*$", "maxLength": 100},
+    "branch": {"type": "string", "minLength": 1, "maxLength": 200, "pattern": "^[A-Za-z0-9._/-]+$"},
+    "timestamp": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?Z$"}
+  }
+}

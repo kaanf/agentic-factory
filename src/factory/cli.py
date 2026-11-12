@@ -1,7 +1,10 @@
 """Command-line interface. Never writes to the project directory.
 
 ``validate`` and ``plan --evidence`` read only local files. ``evidence collect`` and ``plan --live``
-additionally perform read-only GitHub API requests through the GitHub CLI.
+additionally perform read-only GitHub API requests through the GitHub CLI. ``preflight`` and
+``reconcile`` read local files (project, checkout git metadata, Archon's install record, run records)
+and, with ``--live``, GitHub. No command starts Archon or a coding agent, and none has an option
+to: there is no ``--execute``.
 
 Exit codes:
     0   success (validate: project is valid; plan: plan computed, whatever the task states, and with
@@ -12,12 +15,19 @@ Exit codes:
     64  usage error (including an output path inside the project, or one that is a symbolic link)
     70  internal error
     73  the snapshot could not be saved to --output / --save-evidence (nothing replaced, no plan written)
+
+preflight additionally exits 1 when the dry run did not pass (any check FAIL or UNKNOWN), and 3 when
+another coordinator holds the dispatch lock. Exit 0 means only that the dry run passed: the report's
+authorization is never granted. reconcile exits 3 when its state is UNKNOWN, UNCERTAIN or
+COORDINATOR_ACTIVE (or any finding is unknown or uncertain), and 0 for every other, well-established
+state, blocking or not.
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import os
 import sys
 from collections.abc import Callable, Sequence
 from datetime import datetime
@@ -31,11 +41,16 @@ from factory.github import GhCliTransport, GitHubApi, GitHubError, Transport
 from factory.issues import Issue
 from factory.live import plan_live
 from factory.output import OutputError, SnapshotOutput
-from factory.planning import Plan, evaluate
-from factory.render import plan_text, to_json, validation_document
+from factory.planning import Plan, Result, evaluate
+from factory.preflight import lock_refusal, preflight
+from factory.reconcile import State as ReconcileState
+from factory.reconcile import decide, observe, reconcile_document
+from factory.render import plan_text, preflight_text, reconcile_text, to_json, validation_document
+from factory.runs import probe_lock
 from factory.validation import validate_project
 
 EXIT_OK = 0
+EXIT_REFUSED = 1
 EXIT_INVALID = 2
 EXIT_INCOMPLETE = 3
 EXIT_USAGE = 64
@@ -73,6 +88,33 @@ def _parser() -> argparse.ArgumentParser:
     collect_cmd = evidence_commands.add_parser("collect", help="collect a snapshot from GitHub (read-only)")
     collect_cmd.add_argument("project", type=Path, help="project directory (planning repository root)")
     collect_cmd.add_argument("--output", "-o", type=Path, help="write the snapshot here instead of stdout")
+
+    home = Path.home()
+    preflight_cmd = commands.add_parser(
+        "preflight", help="dry-run dispatch checks and the Archon command (never executes anything)"
+    )
+    preflight_cmd.add_argument("project", type=Path, help="project directory (planning repository root)")
+    preflight_cmd.add_argument("--task", required=True, help="task id")
+    preflight_cmd.add_argument("--revision", required=True, type=int, help="expected task revision")
+    preflight_cmd.add_argument(
+        "--checkout", required=True, type=Path, help="the task repository's local checkout registered with Archon"
+    )
+    preflight_source = preflight_cmd.add_mutually_exclusive_group(required=True)
+    preflight_source.add_argument("--evidence", type=Path, help="plan from this evidence snapshot (offline)")
+    preflight_source.add_argument("--live", action="store_true", help="plan and read remote state from GitHub")
+    preflight_cmd.add_argument("--state-dir", type=Path, default=home / ".factory", help="runtime state directory")
+    preflight_cmd.add_argument("--archon-home", type=Path, default=home / ".archon", help="Archon home directory")
+    preflight_cmd.add_argument("--format", choices=("text", "json"), default="text")
+
+    reconcile_cmd = commands.add_parser("reconcile", help="reconcile one task revision's dispatch state (read-only)")
+    reconcile_cmd.add_argument("project", type=Path, help="project directory (planning repository root)")
+    reconcile_cmd.add_argument("--task", required=True, help="task id")
+    reconcile_cmd.add_argument("--checkout", type=Path, help="the task repository's local checkout")
+    reconcile_source = reconcile_cmd.add_mutually_exclusive_group(required=True)
+    reconcile_source.add_argument("--live", action="store_true", help="read branches and PRs from GitHub")
+    reconcile_source.add_argument("--offline", action="store_true", help="do not read GitHub; remote facts are unknown")
+    reconcile_cmd.add_argument("--state-dir", type=Path, default=home / ".factory", help="runtime state directory")
+    reconcile_cmd.add_argument("--format", choices=("text", "json"), default="text")
     return parser
 
 
@@ -216,6 +258,85 @@ def _collect(
     return EXIT_INCOMPLETE if collection.errors else EXIT_OK
 
 
+def _api(transport: Transport | None) -> GitHubApi:
+    return GitHubApi(transport or GhCliTransport())
+
+
+def _preflight(
+    args: argparse.Namespace, out: TextIO, err: TextIO, transport: Transport | None, now: Callable[[], datetime] | None
+) -> int:
+    result = validate_project(args.project)
+    project = result.project
+    project_id = project.manifest.project_id if project else None
+    if result.errors:
+        return _report_invalid(result.errors, result.warnings, args.format, project_id, out, err)
+    assert project is not None
+    if probe_lock(args.state_dir, project.manifest.project_id) == "held":
+        # Refuse before any evidence is collected: no GitHub request, no snapshot read. This is an
+        # early observation, not exclusive locking; preflight() checks the lock again itself.
+        document = lock_refusal(project, args.task, None).to_dict()
+        out.write(to_json(document) if args.format == "json" else preflight_text(document))
+        return EXIT_INCOMPLETE
+    incomplete = False
+    api: GitHubApi | None = None
+    if args.live:
+        try:
+            api = _api(transport)
+        except GitHubError as exc:
+            err.write(f"error: {exc.message}\n")
+            return EXIT_INCOMPLETE
+        live = plan_live(project, api, now)
+        if live.issues:
+            return _report_invalid(live.issues, [], args.format, project_id, out, err)
+        assert live.plan is not None
+        plan = live.plan
+        incomplete = bool(live.errors)
+        _report_collection(live.errors, live.snapshot["credentialIsolation"], err)
+    else:
+        snapshot_result = load_snapshot(args.evidence, project)
+        if snapshot_result.errors:
+            return _report_invalid(snapshot_result.errors, [], args.format, project_id, out, err)
+        assert snapshot_result.snapshot is not None
+        plan = evaluate(project, snapshot_result.snapshot)
+    checkout = Path(os.path.abspath(args.checkout))
+    report = preflight(project, args.task, args.revision, checkout, args.state_dir, args.archon_home, plan, api)
+    document = report.to_dict()
+    out.write(to_json(document) if args.format == "json" else preflight_text(document))
+    if report.lock_held or incomplete:
+        return EXIT_INCOMPLETE
+    return EXIT_OK if report.result is Result.PASS else EXIT_REFUSED
+
+
+def _reconcile(args: argparse.Namespace, out: TextIO, err: TextIO, transport: Transport | None) -> int:
+    result = validate_project(args.project)
+    project = result.project
+    project_id = project.manifest.project_id if project else None
+    if result.errors:
+        return _report_invalid(result.errors, result.warnings, args.format, project_id, out, err)
+    assert project is not None
+    task = project.tasks.get(args.task)
+    if task is None:
+        err.write(f"factory: error: --task: no task '{args.task}' in the project\n")
+        return EXIT_USAGE
+    repo = project.manifest.repository(task.repository)
+    assert repo is not None
+    api: GitHubApi | None = None
+    if args.live:
+        try:
+            api = _api(transport)
+        except GitHubError as exc:
+            err.write(f"error: {exc.message}\n")
+            return EXIT_INCOMPLETE
+    checkout = Path(os.path.abspath(args.checkout)) if args.checkout is not None else None
+    observations = observe(project, task, checkout, args.state_dir, api)
+    decision = decide(observations)
+    document = reconcile_document(task, repo, decision, observations)
+    out.write(to_json(document) if args.format == "json" else reconcile_text(document))
+    unknown = any(f.result in ("UNKNOWN", "UNCERTAIN") for f in decision.findings)
+    unsafe = decision.state in (ReconcileState.UNKNOWN, ReconcileState.UNCERTAIN, ReconcileState.COORDINATOR_ACTIVE)
+    return EXIT_INCOMPLETE if unknown or unsafe else EXIT_OK
+
+
 def run(
     argv: Sequence[str] | None = None,
     out: TextIO | None = None,
@@ -234,6 +355,10 @@ def run(
             return _validate(args, out, err)
         if args.command == "evidence":
             return _collect(args, out, err, transport, now)
+        if args.command == "preflight":
+            return _preflight(args, out, err, transport, now)
+        if args.command == "reconcile":
+            return _reconcile(args, out, err, transport)
         return _plan(args, out, err, transport, now)
     except Exception as exc:  # noqa: BLE001 - last-resort guard; report and fail closed
         err.write(f"internal error: {type(exc).__name__}: {exc}\n")

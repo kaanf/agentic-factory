@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from pathlib import Path
 
+from factory.archon import denied_by_factory
 from factory.documents import resolve_inside
 from factory.graph import cycle_path, find_cycles
 from factory.issues import Issue
@@ -133,6 +134,7 @@ def _manifest_issues(project: Project) -> tuple[list[Issue], list[Issue]]:
                 )
             )
 
+    errors.extend(_dispatch_issues(project))
     if manifest.dispatch_enabled:
         errors.append(
             Issue(
@@ -143,6 +145,62 @@ def _manifest_issues(project: Project) -> tuple[list[Issue], list[Issue]]:
             )
         )
     return errors, warnings
+
+
+def _dispatch_issues(project: Project) -> list[Issue]:
+    """The dispatch section's own consistency. Factory Core's workflow denylist cannot be overridden."""
+    dispatch = project.manifest.dispatch
+    file = project.manifest.file
+    errors: list[Issue] = []
+    for index, workflow in enumerate(dispatch.allowed_workflows):
+        if denied_by_factory(workflow) or workflow in dispatch.forbidden_workflows:
+            errors.append(
+                Issue(
+                    file,
+                    f"dispatch.workflows.allowed[{index}]",
+                    "WORKFLOW_FORBIDDEN",
+                    f"workflow '{workflow}' is denied (merge, build and deploy queues, intake, triggers and cleanup "
+                    "are never allowed)",
+                )
+            )
+    if dispatch.default_workflow is not None and dispatch.default_workflow not in dispatch.allowed_workflows:
+        errors.append(
+            Issue(
+                file,
+                "dispatch.workflows.default",
+                "WORKFLOW_NOT_ALLOWED",
+                f"default workflow '{dispatch.default_workflow}' is not in dispatch.workflows.allowed",
+            )
+        )
+    if dispatch.default_provider is not None and dispatch.default_provider not in dispatch.providers:
+        errors.append(
+            Issue(
+                file,
+                "dispatch.providers.default",
+                "PROVIDER_NOT_AVAILABLE",
+                f"default provider '{dispatch.default_provider}' is not in dispatch.providers.available",
+            )
+        )
+    for task in sorted(project.tasks.values(), key=lambda t: t.id):
+        if task.workflow is not None and task.workflow not in dispatch.allowed_workflows:
+            errors.append(
+                Issue(
+                    task.file,
+                    "execution.workflow",
+                    "WORKFLOW_NOT_ALLOWED",
+                    f"workflow '{task.workflow}' is not in the manifest's dispatch.workflows.allowed",
+                )
+            )
+        if task.provider is not None and task.provider not in dispatch.providers:
+            errors.append(
+                Issue(
+                    task.file,
+                    "execution.provider",
+                    "PROVIDER_NOT_AVAILABLE",
+                    f"provider '{task.provider}' is not in the manifest's dispatch.providers.available",
+                )
+            )
+    return errors
 
 
 def _task_issues(project: Project) -> tuple[list[Issue], list[Issue]]:

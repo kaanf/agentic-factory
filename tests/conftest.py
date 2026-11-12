@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import socket
 import sys
 from collections.abc import Callable
@@ -13,6 +14,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent))
 
 from factory.cli import run  # noqa: E402
+
+# Factory Core refuses group- or world-writable files and directories (fsread permission policy).
+# Hosts with umask 002 (Ubuntu user private groups, GitHub runners) create exactly those, so Factory
+# Core refuses checkouts and state created there; that is intended and tested explicitly
+# (tests/unit/test_fsread_policy.py creates group-writable objects on purpose). The fixtures the tests
+# build model a correctly configured host, so the test process uses umask 022. Factory Core itself
+# never changes the umask.
+os.umask(0o022)
 
 
 class NetworkAccessError(RuntimeError):

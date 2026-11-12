@@ -93,6 +93,59 @@ def read_integration_head(api: GitHubApi, repo: Repository) -> str:
         raise GitHubError("unexpected git ref response") from exc
 
 
+def branch_pull_requests(api: GitHubApi, repo: Repository, branch: str) -> list[dict[str, Any]]:
+    """Every pull request whose head is ``branch`` in ``repo`` itself (not a fork), by number.
+
+    A record is skipped only when it is confirmed to be about something else: a head ref naming a
+    different branch, or a head repository naming a different repository. A record whose identity
+    is missing or malformed (no head ref, a null head repository as for a deleted fork, no number,
+    state or base) makes the whole listing incomplete, because it might be this branch's PR.
+
+    Raises ``GitHubError`` when the list cannot be read completely or a record is incomplete.
+    """
+    owner = repo.github.split("/")[0]
+    pulls = api.get_list(f"repos/{repo.github}/pulls", state="all", head=f"{owner}:{branch}")
+    entries = []
+    for index, pr in enumerate(pulls):
+        if not isinstance(pr, dict):
+            raise _IncompleteError(f"pull request {index} for {branch} is not an object")
+        number = pr.get("number")
+        if not isinstance(number, int) or isinstance(number, bool) or number < 1:
+            raise _IncompleteError(f"pull request {index} for {branch} has no valid number")
+        head = pr.get("head")
+        if not isinstance(head, dict) or not isinstance(head.get("ref"), str) or not head["ref"]:
+            raise _IncompleteError(f"PR #{number} has no head ref, so it may be from {branch}")
+        if head["ref"] != branch:
+            continue  # confirmed: another branch
+        head_repo = head.get("repo")
+        full_name = head_repo.get("full_name") if isinstance(head_repo, dict) else None
+        if not isinstance(full_name, str) or not full_name:
+            raise _IncompleteError(
+                f"PR #{number} from {branch} has no head repository identity (deleted fork or incomplete record)"
+            )
+        if full_name.lower() != repo.github.lower():
+            continue  # confirmed: the same branch name in a fork, not this task's PR
+        base = pr.get("base")
+        if not isinstance(base, dict) or not isinstance(base.get("ref"), str) or not base["ref"]:
+            raise _IncompleteError(f"PR #{number} from {branch} has no base ref")
+        if pr.get("state") not in ("open", "closed") or "merged_at" not in pr:
+            raise _IncompleteError(f"PR #{number} from {branch} has no valid state")
+        merged_at = pr["merged_at"]
+        if merged_at is not None and (not isinstance(merged_at, str) or pr["state"] != "closed"):
+            raise _IncompleteError(f"PR #{number} from {branch} has a contradictory merge state")
+        merged = merged_at is not None
+        entries.append(
+            {
+                "baseBranch": base["ref"],
+                # Unmerged PRs expose a test-merge SHA here; it is not a merge commit.
+                "mergeCommitSha": pr.get("merge_commit_sha") if merged else None,
+                "number": number,
+                "state": "merged" if merged else pr["state"],
+            }
+        )
+    return sorted(entries, key=lambda e: e["number"])
+
+
 class _RepositoryCollector:
     def __init__(self, api: GitHubApi, repo: Repository, tasks: list[Task], errors: list[CollectionError]) -> None:
         self.api = api
@@ -112,29 +165,11 @@ class _RepositoryCollector:
         return None
 
     def _pull_requests(self, branch: str) -> list[dict[str, Any]] | None:
-        owner = self.repo.github.split("/")[0]
         try:
-            pulls = self.api.get_list(f"{self.base}/pulls", state="all", head=f"{owner}:{branch}")
+            return branch_pull_requests(self.api, self.repo, branch)
         except GitHubError as exc:
             self._error(f"branches.{branch}", exc)
             return None
-        entries = []
-        for pr in pulls:
-            head_repo = (pr.get("head") or {}).get("repo") or {}
-            if pr["head"]["ref"] != branch or str(head_repo.get("full_name", "")).lower() != self.repo.github.lower():
-                continue  # same branch name in a fork: not this task's PR
-            merged = pr.get("merged_at") is not None
-            state = "merged" if merged else ("closed" if pr["state"] == "closed" else "open")
-            entries.append(
-                {
-                    "baseBranch": pr["base"]["ref"],
-                    # Unmerged PRs expose a test-merge SHA here; it is not a merge commit.
-                    "mergeCommitSha": pr.get("merge_commit_sha") if merged else None,
-                    "number": pr["number"],
-                    "state": state,
-                }
-            )
-        return sorted(entries, key=lambda e: e["number"])
 
     def _reachable(self, sha: str, head: str) -> bool:
         comparison = self.api.get(f"{self.base}/compare/{segment(sha)}...{segment(head)}")

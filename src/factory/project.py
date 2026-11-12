@@ -30,6 +30,7 @@ from factory.model import (
     Adr,
     AdrPin,
     Consumption,
+    Dispatch,
     Edge,
     Manifest,
     Output,
@@ -145,6 +146,9 @@ def _manifest(document: dict[str, Any], file: str) -> Manifest:
             )
         )
     architecture = document["architecture"]
+    dispatch = document["dispatch"]
+    workflows = dispatch.get("workflows", {})
+    providers = dispatch.get("providers", {})
     return Manifest(
         file=file,
         project_id=document["project"]["id"],
@@ -155,6 +159,16 @@ def _manifest(document: dict[str, Any], file: str) -> Manifest:
         profile_refs=tuple(ProfileRef(p["id"], p["repository"], p["path"]) for p in architecture["profiles"]),
         dispatch_enabled=bool(document["dispatch"].get("enabled", False)),
         planning_directory=document.get("planningDirectory", ""),
+        dispatch=Dispatch(
+            enabled=bool(dispatch.get("enabled", False)),
+            archon_version=dispatch.get("archon", {}).get("validatedVersion"),
+            default_workflow=workflows.get("default"),
+            allowed_workflows=tuple(workflows.get("allowed", [])),
+            forbidden_workflows=tuple(workflows.get("forbidden", [])),
+            default_provider=providers.get("default"),
+            providers={k: v["archonAssistant"] for k, v in sorted(providers.get("available", {}).items())},
+            max_attempts=dispatch.get("maxAttemptsPerTaskRevision", 2),
+        ),
     )
 
 
@@ -175,6 +189,8 @@ def _task(document: dict[str, Any], file: str) -> Task:
         consumes=tuple(Consumption(c["output"], c["version"]) for c in document.get("consumes", [])),
         depends_on=tuple(Edge(e["task"], e["gate"], e["requires"]) for e in document.get("dependsOn", [])),
         acceptance=tuple(document["acceptance"]),
+        workflow=document.get("execution", {}).get("workflow"),
+        provider=document.get("execution", {}).get("provider"),
     )
 
 

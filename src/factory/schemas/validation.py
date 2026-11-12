@@ -18,6 +18,8 @@ SCHEMA_FILES: dict[str, str] = {
     "profile": "architecture-profile.v1.schema.json",
     "adr": "adr-frontmatter.v1.schema.json",
     "evidence": "evidence-snapshot.v1.schema.json",
+    "run-intent": "run-intent.v1.schema.json",
+    "run-outcome": "run-outcome.v1.schema.json",
 }
 
 _CODES: dict[str, str] = {
@@ -33,6 +35,8 @@ _CODES: dict[str, str] = {
     "minLength": "INVALID_VALUE",
     "maxLength": "INVALID_VALUE",
     "propertyNames": "INVALID_FORMAT",
+    "minProperties": "TOO_FEW_ITEMS",
+    "maximum": "INVALID_VALUE",
 }
 
 

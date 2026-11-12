@@ -8,7 +8,9 @@ is it safe for downstream tasks? Each answer is backed by explicit reason codes.
 never counts as success.
 
 **Scope.** `validate` and `plan --evidence` read only local files. `evidence collect` and
-`plan --live` make read-only GitHub API requests through the GitHub CLI. Nothing dispatches agents, pushes, merges, deploys or writes to
+`plan --live` make read-only GitHub API requests through the GitHub CLI. `preflight` and `reconcile`
+(Stage 5) check a task revision for dispatch and print the Archon command a future dispatch would run,
+without running it. Nothing dispatches agents, starts Archon, pushes, merges, deploys or writes to
 the project directory. No snapshot is treated as authenticated. Approvals are read from merge records,
 but human authorization is unverifiable while agents can use the approver's GitHub credentials, so no
 collected approval lets a task start.
@@ -29,6 +31,8 @@ factory validate <project-dir> [--format text|json]
 factory plan <project-dir> --evidence <snapshot.json> [--format text|json]
 factory plan <project-dir> --live [--save-evidence <snapshot.json>] [--format text|json]
 factory evidence collect <project-dir> [--output <snapshot.json>]
+factory preflight <project-dir> --task ID --revision N --checkout DIR (--evidence FILE | --live) [--format text|json]
+factory reconcile <project-dir> --task ID [--checkout DIR] (--live | --offline) [--format text|json]
 ```
 
 `validate` checks the manifest, tasks, architecture profiles and ADR front matter against their
@@ -55,6 +59,17 @@ introduced each task, profile and ADR file, and who merged it; see
 [approval-verification.md](docs/architecture/approval-verification.md) for why that is provenance
 and not human approval.
 
+`preflight` runs every dispatch precondition it can observe (task revision and readiness, workflow
+and provider policy, the Archon version from its install record, the checkout's Archon configuration
+and branches, run records, reconciliation) and builds the Archon command as an argument vector. Its
+report keeps the dry-run result apart from authorization, which is never granted in this version. The
+dry run itself cannot pass yet: Archon's database-held AI configuration can change the provider and
+is not readable, so the effective provider is never established.
+`reconcile` classifies one task revision's dispatch state (Stage 4B §7) from run records, local and
+remote branches and pull requests, read-only. Neither has an option to execute anything. See
+[archon-adapter.md](docs/architecture/archon-adapter.md) for their exit codes, every reason code and
+the decision table.
+
 | Exit code | Meaning |
 |---|---|
 | 0 | Success (validate: project valid; plan: plan computed, whatever the task states, and with `--live` every fact collected; collect: every fact collected) |
@@ -79,7 +94,8 @@ factory/tasks/*.yaml        one task per file (factory.task/v1)
 
 Project-specific names (repositories, branches, check names, workflow paths) live only in the
 manifest. See `tests/fixtures/three-repo-project` (three repositories, `dev`/`main`/`feat/`) and
-`tests/fixtures/single-repo-project` (one Python repository, `trunk`/`stable`/`topic/`).
+`tests/fixtures/single-repo-project` (one Python repository, `trunk`/`stable`/`topic/`) and
+`tests/fixtures/dispatch-project` (a dispatch configuration, `next`/`stable`/`work/`).
 
 Schemas: `src/factory/schemas/*.schema.json` (JSON Schema 2020-12, shipped inside the package).
 
@@ -98,12 +114,28 @@ Schemas: `src/factory/schemas/*.schema.json` (JSON Schema 2020-12, shipped insid
 - [Live planning](docs/architecture/live-planning.md): `plan --live`, the architecture gate end to
   end, trust boundary, determinism and collection consistency.
 - [Decision 0004](docs/decisions/0004-stage4-live-planning.md): Stage 4 decisions.
+- [Archon adapter](docs/architecture/archon-adapter.md): Stage 5 preflight, command builder, run
+  records, reconciliation, security boundaries and Stage 6 prerequisites.
+- [Decision 0005](docs/decisions/0005-stage5-archon-adapter.md): Stage 5 decisions and deviations.
+- [Decision 0006](docs/decisions/0006-stage5-security-remediation.md): Stage 5 security review
+  findings F1-F6 and their fixes.
+- [Decision 0007](docs/decisions/0007-stage5-second-remediation.md): second review findings R1-R3.
+- [Decision 0008](docs/decisions/0008-stage5-observation-integrity.md): observation integrity, third
+  review findings S1-S5.
+- [Decision 0009](docs/decisions/0009-observation-consistency-contract.md): **PROPOSED** observation
+  consistency contract (requires a human decision).
+- [Decision 0010](docs/decisions/0010-stage5-fourth-remediation.md): fourth review findings Q2-Q5.
+- [Archon probes](docs/probes/archon-probes.md): why no executable probe ships, and the conditions
+  for a future approved manual probe (acceptance incomplete).
+- [Provider verification](docs/architecture/provider-verification.md): evidence, missing acceptance
+  criteria and a proposed read-only design.
 - [Technical debt](docs/technical-debt.md): known limitations and their classification.
 
 ## Development
 
 ```sh
 uv run pytest                                   # all tests, sockets blocked in-process
+uv run ruff check . && uv run ruff format --check .   # lint and format (also in CI)
 uv run pytest tests/acceptance -v               # Stage 1 acceptance suite T1-T16
 python tests/support.py                         # regenerate committed evidence fixtures
 python tests/github_support.py                  # re-record real GitHub responses (read-only)
